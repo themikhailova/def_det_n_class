@@ -35,6 +35,9 @@ Watershed: метод сегментации, разделяющий объек�
 
 **Пример удаленного фона**
 
+![image](https://github.com/user-attachments/assets/c396b6fb-539d-413d-a913-969e8d8c483d)
+
+
 ![image](https://github.com/user-attachments/assets/dbca5384-a6eb-45dd-9f7c-b1802bf5dfee) ![image](https://github.com/user-attachments/assets/f47a76a2-c1a7-449c-9570-76e3f56c2004)
 
 
