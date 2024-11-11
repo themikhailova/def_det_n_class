@@ -2,8 +2,7 @@
 Данный проект создается для распознавания и классификации дефектов на различных [деталях](https://drive.google.com/drive/folders/1pdHhjAuZXqzPTgiYeGQCL0cEMqkWQ2TN?usp=sharing)
 
 ## Use Case: Распознавание дефектов с учетом эталонных деталей
-
-![alt text](https://drive.google.com/file/d/1NtPK2yhA22UkEtwkA5IR6YNFWClXd2Bd/view)
+![image](https://github.com/user-attachments/assets/8f18593b-4ceb-41c7-8b48-d11413b1e5ed)
 
 **Цель:** Определить, является ли деталь идеальной или содержит дефекты
 **Основной сценарий:**
