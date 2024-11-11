@@ -3,7 +3,7 @@
 
 ## Use Case: Распознавание дефектов с учетом эталонных деталей
 
-![alt text](https://drive.google.com/file/d/1NtPK2yhA22UkEtwkA5IR6YNFWClXd2Bd/view?usp=sharing)
+![alt text](https://drive.google.com/file/d/1NtPK2yhA22UkEtwkA5IR6YNFWClXd2Bd/view)
 
 **Цель:** Определить, является ли деталь идеальной или содержит дефекты
 **Основной сценарий:**
