@@ -53,7 +53,7 @@
 **descriptors/manage_standard_descriptors.py** -  для извлечения дескрипторов из эталонных изображений и последующего составления базы дескрипторов по классам  
 **train_randomforest.py** - для обучения случайного леса на наборе эталонных изображений  
 **descriptors/image_descriptor_extraction.py** - для извлечения дескрипторов из нового изображения с помощью Sift/ORB  
-**predict_detail_type.py** - для классификации детал на изображении  
+**predict_detail_type.py** - для классификации детали на изображении  
 **defected_detail_check.py** - для сопоставления дескрипторов фото с эталонными (feature matching)  
 
 
