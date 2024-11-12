@@ -9,8 +9,8 @@ from defected_detail_check import FeatureMatcher
 
 
 # Пути к сохранённой модели и LabelEncoder
-model_path = 'random_forest_model.pkl'
-le_path = 'label_encoder.pkl'
+model_path = './models/random_forest_model.pkl'
+le_path = './models/label_encoder.pkl'
 img_path = r"D:\Desktop\ref\details\13.jpg"
 
 if not os.path.exists(img_path):
