@@ -120,9 +120,9 @@ class RandomForestTrainer:
         for param, value in grid_search.best_params_.items():
             print(f"{param}: {value}")
 
-        with open('random_forest_model.pkl', 'wb') as model_file:
+        with open('./models/random_forest_model.pkl', 'wb') as model_file:
             pickle.dump(best_model, model_file)
-        with open('label_encoder.pkl', 'wb') as le_file:
+        with open('./models/label_encoder.pkl', 'wb') as le_file:
             pickle.dump(self.label_encoder, le_file)
 
 
