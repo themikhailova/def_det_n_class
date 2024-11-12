@@ -1,10 +1,9 @@
 import sys
 import os
-
 from predict_detail_type import DetailClassifier
-# Добавление директории для импорта класса экстрактора признаков
-sys.path.append(os.path.abspath('./descriptors'))
 from defected_detail_check import FeatureMatcher
+
+# Добавление директории для импорта класса предобработки изображений
 sys.path.append(os.path.abspath('./preprocess'))
 from preprocess.back_delete import ImageProcessor
 
