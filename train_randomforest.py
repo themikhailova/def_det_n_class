@@ -9,9 +9,11 @@ from sklearn.preprocessing import LabelEncoder
 import pickle
 from preprocess_image import ImagePreprocessor
 
-# Подключение директорий для импорта классов для экстракции дескрипторов и аугментации
+# Подключение директорий для импорта классов для предобработки изображений, экстракции дескрипторов и аугментации
+sys.path.append(os.path.abspath('./preprocess'))
 sys.path.append(os.path.abspath('./descriptors'))
 sys.path.append(os.path.abspath('./augmentation'))
+from preprocess.preprocess_image import ImagePreprocessor
 from descriptors.image_descriptor_extraction import ImageDescriptorExtractor
 from descriptors.manage_standard_descriptors import DescriptorManager
 from augmentation.image_augmentor import ImageAugmentor
@@ -28,7 +30,7 @@ class RandomForestTrainer:
         self.preprocessor = ImagePreprocessor()
         self.augmentor = ImageAugmentor()
         self.descriptor_extractor = ImageDescriptorExtractor()
-        self.reference_manager = DescriptorManager()  # Загрузка эталонных дескрипторов
+        self.standard_manager = DescriptorManager()  # Загрузка эталонных дескрипторов
 
     def average_descriptors(self, descriptors):
         """
@@ -53,12 +55,12 @@ class RandomForestTrainer:
 
     def load_and_process_images(self):
         """
-        Загрузка и обработка изображений, включая аугментацию и извлечение дескрипторов.
+        Загрузка и обработка эталонных изображений, включая аугментацию и извлечение дескрипторов.
         """
         # Загрузка эталонных дескрипторов из директории
-        ref_features, ref_labels = self.reference_manager.load_reference_descriptors()
+        ref_features, ref_labels = self.standard_manager.load_standard_descriptors()
         
-        # Обработка эталонных дескрипторов (усреднение)
+        # Обработка эталонных дескрипторов 
         for descriptors in ref_features:
             averaged_descriptors = self.average_descriptors(descriptors)  # Усреднение дескрипторов
             self.features.append(averaged_descriptors)
@@ -127,7 +129,7 @@ class RandomForestTrainer:
 
 
 if __name__ == "__main__":
-    # Инициализация тренера без необходимости указывать descriptor_extractor
+    # Инициализация класса обучения
     trainer = RandomForestTrainer()
     
     # Загрузка и обработка изображений
