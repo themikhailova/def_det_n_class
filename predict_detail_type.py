@@ -88,8 +88,8 @@ class DetailClassifier:
 # Пример использования:
 # if __name__ == "__main__":
 #     # Пути к сохранённой модели и LabelEncoder
-#     model_path = 'random_forest_model.pkl'
-#     le_path = 'label_encoder.pkl'
+#     model_path = './models/random_forest_model.pkl'
+#     le_path = './models/label_encoder.pkl'
     
 #     # Инициализация классификатора без необходимости передавать descriptor_extractor
 #     classifier = DetailClassifier(model_path, le_path)
