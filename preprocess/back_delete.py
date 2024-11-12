@@ -7,7 +7,13 @@ class ImageProcessor:
     def __init__(self, image_path):
         self.image_path = image_path
         
+        """
+        Выделение детали и удаление фона.
 
+        :param image_path: путь к исходному изображению
+        :return: предварительно обработанное изображение без фона
+        """     
+        
     def process_image(self):
         # обрабатывает одно изображение, сохраняет результат и возвращает промежуточные данные обработки'''
         image = cv2.imread(self.image_path)
