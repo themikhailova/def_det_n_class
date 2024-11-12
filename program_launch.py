@@ -1,12 +1,12 @@
 import sys
 import os
 
-from back_delete import ImageProcessor
 from predict_detail_type import DetailClassifier
 # Добавление директории для импорта класса экстрактора признаков
 sys.path.append(os.path.abspath('./descriptors'))
 from defected_detail_check import FeatureMatcher
-
+sys.path.append(os.path.abspath('./preprocess'))
+from preprocess.back_delete import ImageProcessor
 
 # Пути к сохранённой модели и LabelEncoder
 model_path = './models/random_forest_model.pkl'
