@@ -4,11 +4,11 @@ import pickle
 import sys
 import os
 
-# Добавление директории для импорта класса экстрактора признаков
-sys.path.append(os.path.abspath('./descriptors'))
-from descriptors.image_descriptor_extraction import ImageDescriptorExtractor
+# Добавление директорий для импорта классов предобработки изображений и  экстрактора признаков
 sys.path.append(os.path.abspath('./preprocess'))
+sys.path.append(os.path.abspath('./descriptors'))
 from preprocess.preprocess_image import ImagePreprocessor
+from descriptors.image_descriptor_extraction import ImageDescriptorExtractor
 
 class DetailClassifier:
     def __init__(self, model_path, le_path, threshold=0.6):
@@ -27,8 +27,8 @@ class DetailClassifier:
             self.loaded_label_encoder = pickle.load(le_file)
         
         # Инициализация экстрактора признаков
-        self.descriptor_extractor = ImageDescriptorExtractor()  # По умолчанию используется SIFT или ORB
-        self.threshold = threshold  # Порог уверенности для классификации
+        self.descriptor_extractor = ImageDescriptorExtractor()  
+        self.threshold = threshold  # Порог уверенности для определения класса
 
     def preprocess_image(self, image):
         """
@@ -91,7 +91,7 @@ class DetailClassifier:
 #     model_path = './models/random_forest_model.pkl'
 #     le_path = './models/label_encoder.pkl'
     
-#     # Инициализация классификатора без необходимости передавать descriptor_extractor
+#     # Инициализация классификатора 
 #     classifier = DetailClassifier(model_path, le_path)
     
 #     test_image = cv2.imread('.\\test_images_unlabeled\\17.jpg')
