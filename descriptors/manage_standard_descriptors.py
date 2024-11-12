@@ -3,7 +3,7 @@ import pickle
 import cv2
 import sys
 
-# Подключение директории для импорта класса экстрактора
+# Подключение директории для импорта класса извлечения дескрипторов из изображения
 sys.path.append(os.path.abspath('./descriptors'))
 from descriptors.image_descriptor_extraction import ImageDescriptorExtractor
 
@@ -21,7 +21,7 @@ class DescriptorManager:
         self.dataset_path = dataset_path
         self.descriptor_dir = descriptor_dir
 
-    def save_reference_descriptors(self):
+    def save_standard_descriptors(self):
         """
         Извлекает и сохраняет дескрипторы из изображений в dataset_path в директорию descriptor_dir.
         """
@@ -51,11 +51,11 @@ class DescriptorManager:
         
         # Сообщение о результате сохранения
         if descriptors_saved:
-            print("Дескрипторы успешно сохранены.")
+            print("Эталонные дескрипторы успешно сохранены.")
         else:
-            print("Не удалось найти дескрипторов для сохранения.")
+            print("Не удалось найти эталонные дескрипторы для сохранения.")
 
-    def load_reference_descriptors(self):
+    def load_standard_descriptors(self):
         """
         Загружает дескрипторы из файлов в директории descriptor_dir.
         
@@ -89,11 +89,11 @@ class DescriptorManager:
 
 
 if __name__ == "__main__":
-    # Инициализация менеджера эталонных дескрипторов без параметров (по умолчанию)
+    # Инициализация менеджера эталонных дескрипторов 
     reference_manager = DescriptorManager()
     
     # Сохранение эталонных дескрипторов в директорию
-    reference_manager.save_reference_descriptors()
+    reference_manager.save_standard_descriptors()
     
     # Загрузка эталонных дескрипторов для последующей обработки
-    #features, labels = reference_manager.load_reference_descriptors()
+    #features, labels = reference_manager.load_standard_descriptors()
