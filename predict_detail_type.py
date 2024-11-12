@@ -3,12 +3,12 @@ import numpy as np
 import pickle
 import sys
 import os
-from preprocess_image import ImagePreprocessor
 
 # Добавление директории для импорта класса экстрактора признаков
 sys.path.append(os.path.abspath('./descriptors'))
 from descriptors.image_descriptor_extraction import ImageDescriptorExtractor
-
+sys.path.append(os.path.abspath('./preprocess'))
+from preprocess.preprocess_image import ImagePreprocessor
 
 class DetailClassifier:
     def __init__(self, model_path, le_path, threshold=0.6):
