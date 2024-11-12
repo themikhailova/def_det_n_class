@@ -3,7 +3,7 @@ import os
 from predict_detail_type import DetailClassifier
 from defected_detail_check import FeatureMatcher
 
-# Добавление директории для импорта класса предобработки изображений
+# Добавление директории для импорта класса предобработки изображений (удаление фона)
 sys.path.append(os.path.abspath('./preprocess'))
 from preprocess.back_delete import ImageProcessor
 
