@@ -25,10 +25,11 @@ result = results["result"]
 '''классифицируем деталь'''
 classifier = DetailClassifier(model_path, le_path)
 label, confidence = classifier.classify_image(result)
-print(f"Класс: {label}, Уверенность: {confidence}")
 
 '''сравнение с эталоном'''
-matcher = FeatureMatcher()
-result = matcher.evaluate_image(label, result)
-print(result)
+if label is not None:
+    print(f"Класс: {label}, Уверенность: {confidence}")
+    matcher = FeatureMatcher()
+    result = matcher.evaluate_image(label, result)
+    print(result)
 
