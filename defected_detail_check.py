@@ -5,7 +5,7 @@ import sys
 from preprocess_image import ImagePreprocessor
 from predict_detail_type import DetailClassifier
 
-# Добавление директории для импорта класса экстрактора признаков
+# Добавление директории для импорта классов экстракции признаков из эталонных и новых изображений
 sys.path.append(os.path.abspath('./descriptors'))
 from descriptors.image_descriptor_extraction import ImageDescriptorExtractor
 from descriptors.manage_standard_descriptors import DescriptorManager
@@ -13,7 +13,7 @@ from descriptors.manage_standard_descriptors import DescriptorManager
 class FeatureMatcher:
     def __init__(self, good_match_threshold=0.75, match_ratio_threshold=0.7):
         """
-        Инициализация FeatureMatcher. Для опрделения деффектности модели
+        Инициализация FeatureMatcher. Для опрделения наличия дефектов у детали
 
         :param good_match_threshold: для фильтрации хороших совпадений с помощью метода Lowe's Ratio Test
         для каждой пары совпадающих дескрипторов алгоритм сопоставления возвращает два ближайших совпадения (k=2) по расстоянию
@@ -28,7 +28,7 @@ class FeatureMatcher:
         self.detector = ImageDescriptorExtractor()  
         self.matcher = self._initialize_matcher()
         self.preprocessor = ImagePreprocessor()
-        self.reference_manager = DescriptorManager()  
+        self.standard_manager = DescriptorManager()  
 
     def _initialize_matcher(self):
         """
@@ -52,7 +52,7 @@ class FeatureMatcher:
         :param class_number: номер класса для загрузки дескрипторов
         :return: список дескрипторов всех изображений данного класса
         """
-        features, labels = self.reference_manager.load_reference_descriptors()
+        features, labels = self.standard_manager.load_standard_descriptors()
         class_desc = [desc for desc, label in zip(features, labels) if label == class_number]
         return class_desc
 
@@ -68,7 +68,7 @@ class FeatureMatcher:
     def is_perfect_match(self, new_desc, class_desc):
         """
         Оценка совпадений для определения качества детали.
-        Усреднение дескрипторов перед сравнением здесь делать не надо, тут это снизит точность
+        Усреднение дескрипторов перед сравнением здесь не требуется,так как тут это снизит точность
 
         :param new_desc: дескрипторы нового изображения
         :param class_desc: список дескрипторов эталонного класса
