@@ -46,7 +46,7 @@ class ImageAugmentor:
         '''
         Регулировка яркости и контраста изображения.
 
-        :param image: изображение.
+        :param image: исходное изображение.
         :return: изображение с изменёнными яркостью и контрастом.
         '''
         alpha = np.random.uniform(0.8, 1.2)  # Коэффициент контраста.
@@ -55,9 +55,9 @@ class ImageAugmentor:
 
     def scale_image(self, image):
         '''
-        Масштабирование изображения с последующим возвращением к исходному размеру.
+        Масштабирование изображения с сохоанением исходного размера.
 
-        :param image: изображение.
+        :param image: исходное изображение.
         :return: масштабированное изображение.
         '''
         scale = np.random.uniform(0.9, 1.1)
@@ -69,7 +69,7 @@ class ImageAugmentor:
         '''
         Добавление случайного шума к изображению.
 
-        :param image: изображение.
+        :param image: исходное изображение.
         :return: изображение с добавленным шумом.
         '''
         noise = np.random.normal(0, 10, image.shape).astype(np.uint8)
@@ -79,7 +79,7 @@ class ImageAugmentor:
         '''
         Поворот изображения на случайный угол.
 
-        :param image: изображение.
+        :param image: исходное изображение.
         :return: повернутое изображение.
         '''
         angle = np.random.uniform(-10, 10)
@@ -105,6 +105,6 @@ class ImageAugmentor:
 #     label = '1'
 #     filename = 'image_example'
     
-#     image = cv2.imread('./path/to/your/image.jpg')  # Подставьте путь к вашему изображению
+#     image = cv2.imread('./path/to/your/image.jpg')  # Путь к изображению
 #     augmentor = ImageAugmentor()
 #     augmented_images = augmentor.augment_image(image, label, filename)
