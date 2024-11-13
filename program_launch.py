@@ -13,8 +13,8 @@ le_path = './models/label_encoder.pkl'
 img_path = r"./17.jpg"
 
 if not os.path.exists(img_path):
-    print("Ошибка: файл не найден.")
-    sys.exit(0)  # Завершение программы с кодом ошибки 1
+    print("Ошибка: файл не найден")
+    sys.exit(0)  
 
 '''удаляем фон'''
 processor = ImageProcessor(img_path)
