@@ -105,18 +105,15 @@ class FeatureMatcher:
 
 
 # if __name__ == "__main__":
-#     # Пути к сохранённой модели и LabelEncoder
+#     
 #     model_path = 'random_forest_model.pkl'
 #     le_path = 'label_encoder.pkl'
-
-#     # Инициализация классификатора
+   
 #     classifier = DetailClassifier(model_path, le_path)
-
-#     # Пути к изображению для классификации
 #     image_path = '.\\test_images_unlabeled\\17.jpg'
 #     test_image = cv2.imread(image_path)
 
-#     # Классификация изображения с использованием DetailClassifier
+#     # Классификация изображения DetailClassifier
 #     class_number, confidence = classifier.classify_image(test_image)
 
 #     # Проверка на null классов
