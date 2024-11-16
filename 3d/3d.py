@@ -4,15 +4,14 @@ from PIL import Image, ImageOps
 import io
 import cv2
 
-# Параметры
-obj_file = 'rotated_model.obj'  # Путь к вашему .obj файлу
+obj_file = 'rotated_model.obj'  # Путь к .obj модели
 mask_output_file = 'output.jpg'  # Путь для сохранения маски
-input_image_path = 'det_ret2.jpg'  # Входное изображение
+input_image_path = 'det_ret2.jpg'  # Входное изображение детали
 output_image_path = 'det_masked_output.jpg'  # Путь для сохранения результата
 
 def determine_background(image):
     """
-    Определяет, светлый или темный фон у изображения.
+    Определяет, светлый или темный фон у изображения, чтобы кореектно находить контур
     :param image: Исходное изображение (numpy array).
     :return: "light" если фон светлый, "dark" если фон темный.
     """
@@ -42,7 +41,6 @@ scene.camera.fov = (90, 90)
 # Рассчитываем центральную точку модели
 min_bound, max_bound = mesh.bounds
 center_point = (min_bound + max_bound) / 2
-print("Центральная точка модели:", center_point)
 
 # Камера смотрит на объект
 scene.camera.look_at([center_point], distance=2)
@@ -59,7 +57,7 @@ binary_image = gray_image.point(lambda x: 255 if x > 1 else 0, mode='1')
 binary_image.save(mask_output_file, format="JPEG")
 print(f"Маска сохранена как {mask_output_file}")
 
-# Загрузка и обрезка маски по содержимому
+# Загрузка и обрезка маски по содержимому, чтобы фона был минимум
 def crop_to_content(image):
     coords = cv2.findNonZero(image)  # Ненулевые пиксели
     x, y, w, h = cv2.boundingRect(coords)  # Ограничивающий прямоугольник
@@ -76,12 +74,10 @@ image = cv2.imread(input_image_path)
 background_type = determine_background(image)
 
 if background_type == "light":
-    print("Фон светлый. Используем стандартную бинаризацию.")
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     inverted = cv2.bitwise_not(gray)
     _, binary = cv2.threshold(inverted, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 else:
-    print("Фон темный. Инвертируем изображение перед бинаризацией.")
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
@@ -112,10 +108,10 @@ else:
     centered_image = image
 
 # Преобразуем целевое изображение в оттенки серого
-gray_target = cv2.cvtColor(centered_image, cv2.COLOR_BGR2GRAY)
+#gray_target = cv2.cvtColor(centered_image, cv2.COLOR_BGR2GRAY)
 
 # Бинаризация целевого изображения
-_, binary_target = cv2.threshold(gray_target, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+#_, binary_target = cv2.threshold(gray_target, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
 # Поиск контуров в целевом изображении
 contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -123,6 +119,7 @@ if contours:
     # Находим самый крупный контур
     largest_contour = max(contours, key=cv2.contourArea)
     x, y, contour_width, contour_height = cv2.boundingRect(largest_contour)
+    # Костыли :(
     contour_width, contour_height = contour_width+10, contour_height+21
     x, y = x-6, y
     # Масштабируем маску по размеру контуров целевого изображения
