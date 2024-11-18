@@ -8,7 +8,7 @@ import io
 # Шаг 1: Загрузка модели
 input_obj_file = 'details_v1.obj'
 output_mask_file = 'mask.jpg'
-input_image_path = 'det_rot.jpg'
+input_image_path = 'det_orig.jpg'
 
 mesh = trimesh.load(input_obj_file)
 
@@ -88,27 +88,8 @@ def crop_to_contour(image, contour):
     cropped_image = image[y:y+contour_height, x:x+contour_width]
     return cropped_image
 
-# Функция для центрирования изображения
-def center_image(image, binary_mask):
-    contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if contours:
-        largest_contour = max(contours, key=cv2.contourArea)
-        M = cv2.moments(largest_contour)
-        if M["m00"] != 0:
-            cx, cy = int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])
-            h, w = binary_mask.shape
-            shift_x, shift_y = w // 2 - cx, h // 2 - cy
-            translation_matrix = np.float32([[1, 0, shift_x], [0, 1, shift_y]])
-            centered_image = cv2.warpAffine(image, translation_matrix, (w, h))
-            return centered_image
-    return image
 
 # Шаг 2: Поворот модели, рендеринг и обработка маски
-min_difference = float('inf')
-best_rotation = None
-target_image = cv2.imread(input_image_path, cv2.IMREAD_GRAYSCALE)
-_, target_binary = cv2.threshold(target_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-# Направления для 6 сторон модели
 directions = [
     (0, 0, 0),       # фронт
     (180, 0, 0),     # задняя сторона
@@ -120,9 +101,10 @@ directions = [
 
 min_difference = float('inf')
 best_rotation = None
-contours, _ = cv2.findContours(target_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-# Процесс обработки для каждой из 6 сторон
+target_image = cv2.imread(input_image_path, cv2.IMREAD_GRAYSCALE)
+_, target_binary = cv2.threshold(target_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
 for angle_x, angle_y, angle_z in directions:
     try:
         # Преобразуем углы в радианы
@@ -130,12 +112,11 @@ for angle_x, angle_y, angle_z in directions:
         angle_y_rad = np.radians(angle_y)
         angle_z_rad = np.radians(angle_z)
 
-        # Создаем матрицы поворота для каждой оси
+        # Создаем матрицы поворота
         rotation_matrix_x = trimesh.transformations.rotation_matrix(angle_x_rad, [1, 0, 0], mesh.centroid)
         rotation_matrix_y = trimesh.transformations.rotation_matrix(angle_y_rad, [0, 1, 0], mesh.centroid)
         rotation_matrix_z = trimesh.transformations.rotation_matrix(angle_z_rad, [0, 0, 1], mesh.centroid)
 
-        # Применяем комбинированный поворот
         combined_rotation_matrix = np.dot(np.dot(rotation_matrix_x, rotation_matrix_y), rotation_matrix_z)
         rotated_mesh = mesh.copy()
         rotated_mesh.apply_transform(combined_rotation_matrix)
@@ -151,17 +132,15 @@ for angle_x, angle_y, angle_z in directions:
         # Рендерим изображение
         image_data = scene.save_image(background=[0, 0, 0, 255])
         image = Image.open(io.BytesIO(image_data))
+        contours, _ = cv2.findContours(target_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # Преобразуем в оттенки серого и бинаризуем
-        gray_image = image.convert("L")
-        binary_image = np.array(gray_image.point(lambda x: 255 if x > 1 else 0, mode='1'))
-
-        # Обрезаем маску по содержимому
-        cropped_mask = crop_to_content(binary_image)
-
+        
         if contours:
+            # Преобразуем в оттенки серого и бинаризуем
+            gray_image = image.convert("L")
+            binary_image = np.array(gray_image.point(lambda x: 255 if x > 1 else 0, mode='1'))
+            cropped_mask = crop_to_content(binary_image)
             largest_contour = max(contours, key=cv2.contourArea)
-
             # Масштабируем маску до размеров контура
             resized_mask = resize_mask_to_contour(cropped_mask, largest_contour)
 
@@ -172,7 +151,7 @@ for angle_x, angle_y, angle_z in directions:
             mask_contour = cv2.findContours(resized_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0][0]
             cropped_mask_resized = crop_to_contour(resized_mask, mask_contour)
 
-            # Сравниваем контуры
+            # Сравнение обрезанных контуров
             mask_contours, _ = cv2.findContours(cropped_mask_resized, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             target_contours, _ = cv2.findContours(cropped_target, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -192,8 +171,7 @@ for angle_x, angle_y, angle_z in directions:
 
 print(f"Лучший угол поворота: {best_rotation}, Минимальная разница: {min_difference}")
 
-
-# # Применяем лучший угол поворота к модели
+# Шаг 3: Применяем лучший угол поворота и выводим результат на экран
 angle_x, angle_y, angle_z = best_rotation
 
 angle_x_rad = np.radians(angle_x)
@@ -205,10 +183,13 @@ rotation_matrix_y = trimesh.transformations.rotation_matrix(angle_y_rad, [0, 1, 
 rotation_matrix_z = trimesh.transformations.rotation_matrix(angle_z_rad, [0, 0, 1], mesh.centroid)
 
 combined_rotation_matrix = np.dot(np.dot(rotation_matrix_x, rotation_matrix_y), rotation_matrix_z)
-rotated_mesh = mesh
+rotated_mesh = mesh.copy()
 rotated_mesh.apply_transform(combined_rotation_matrix)
 
 # Сохранение повернутой модели
 output_obj_file_rotated = 'rotated_model.obj'
 rotated_mesh.export(output_obj_file_rotated)
 print(f"Повернутая модель сохранена как {output_obj_file_rotated}")
+
+# Визуализация повернутой модели
+rotated_mesh.show()  # Открывает 3D-просмотрщик Trimesh
