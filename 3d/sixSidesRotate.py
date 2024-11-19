@@ -88,6 +88,61 @@ def crop_to_contour(image, contour):
     cropped_image = image[y:y+contour_height, x:x+contour_width]
     return cropped_image
 
+def align_angle(image, output_path=None, show_result=False):
+    """
+    Автоматическое выравнивание детали на изображении, учитывая небольшой наклон.
+    
+    :param image_path: Путь к входному изображению
+    :param output_path: Путь для сохранения выровненного изображения (необязательно)
+    :param show_result: Флаг для отображения результата (по умолчанию False)
+    :return: Выровненное изображение
+    """
+    
+    # Преобразование в оттенки серого
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    # Размытие для удаления шума
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    
+    # Выделение контуров
+    edges = cv2.Canny(blurred, 50, 150)
+    
+    # Нахождение контуров
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if not contours:
+        raise ValueError("Контуры не найдены. Проверьте изображение.")
+    
+    # Выбор самого большого контура
+    largest_contour = max(contours, key=cv2.contourArea)
+    
+    # Вычисление минимального прямоугольника
+    rect = cv2.minAreaRect(largest_contour)
+    angle = rect[-1]
+    print(angle)
+    # Корректировка угла
+    # if angle < -45:
+    #     angle += 90
+    
+    # Центр изображения для поворота
+    (h, w) = image.shape[:2]
+    center = (w // 2, h // 2)
+    
+    # Поворот изображения
+    rotation_matrix = cv2.getRotationMatrix2D(center, angle-90, 1.0)
+    rotated = cv2.warpAffine(image, rotation_matrix, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    
+    # Сохранение результата
+    if output_path:
+        cv2.imwrite(output_path, rotated)
+    
+    # Отображение результата (если требуется)
+    if show_result:
+        cv2.imshow("Aligned Image", rotated)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+    
+    return rotated
 
 # Шаг 2: Поворот модели, рендеринг и обработка маски
 directions = [
@@ -102,8 +157,12 @@ directions = [
 min_difference = float('inf')
 best_rotation = None
 
-target_image = cv2.imread(input_image_path, cv2.IMREAD_GRAYSCALE)
+target_image = cv2.imread(input_image_path, cv2.IMREAD_ANYCOLOR)
+target_image_rot = align_angle(target_image, './rot_det.jpg', True)
+target_image = cv2.imread('./rot_det.jpg', cv2.IMREAD_GRAYSCALE)
+
 _, target_binary = cv2.threshold(target_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+contours, _ = cv2.findContours(target_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
 for angle_x, angle_y, angle_z in directions:
     try:
@@ -132,8 +191,6 @@ for angle_x, angle_y, angle_z in directions:
         # Рендерим изображение
         image_data = scene.save_image(background=[0, 0, 0, 255])
         image = Image.open(io.BytesIO(image_data))
-        contours, _ = cv2.findContours(target_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
         
         if contours:
             # Преобразуем в оттенки серого и бинаризуем
@@ -169,7 +226,7 @@ for angle_x, angle_y, angle_z in directions:
     except Exception as e:
         print(f"Ошибка при обработке углов ({angle_x}, {angle_y}, {angle_z}): {e}")
 
-print(f"Лучший угол поворота: {best_rotation}, Минимальная разница: {min_difference}")
+print(f"Лучший угол поворота из 6 сторон: {best_rotation}, Минимальная разница: {min_difference}")
 
 # Шаг 3: Применяем лучший угол поворота и выводим результат на экран
 angle_x, angle_y, angle_z = best_rotation
@@ -187,7 +244,7 @@ rotated_mesh = mesh.copy()
 rotated_mesh.apply_transform(combined_rotation_matrix)
 
 # Сохранение повернутой модели
-output_obj_file_rotated = 'rotated_model.obj'
+output_obj_file_rotated = 'rotated_model_v1.obj'
 rotated_mesh.export(output_obj_file_rotated)
 print(f"Повернутая модель сохранена как {output_obj_file_rotated}")
 
