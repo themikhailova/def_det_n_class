@@ -10,7 +10,7 @@ input_image_path_back = '2better.jpg'  # входное изображение �
 output_image_path = 'det_masked_output.jpg'  # путь для сохранения результата
 input_image_path = '123.jpg'  # входное изображение
 
-def align_angle(image, output_path=None, show_result=False):
+def align_angle(image, output_path=None, show_result=False, angle=None):
     """
     выравнивание изображения по углу наклона детали
     
@@ -30,8 +30,9 @@ def align_angle(image, output_path=None, show_result=False):
 
     largest_contour = max(contours, key=cv2.contourArea)
     rect = cv2.minAreaRect(largest_contour)
-    angle = rect[-1]  # угол наклона
-    print(f"Найден угол: {angle}")
+    if angle==None:
+        angle = rect[-1]  # угол наклона
+        print(f"Найден угол: {angle}")
 
     # параметры поворота
     h, w = image.shape[:2]
@@ -47,7 +48,7 @@ def align_angle(image, output_path=None, show_result=False):
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-    return rotated
+    return rotated, angle if angle else 90
 
 def determine_background(image):
     """
@@ -103,7 +104,36 @@ def smooth_mask_strong(mask, kernel_size=21, sigma=10.0, threshold_value=200):
     _, smoothed_mask = cv2.threshold(blurred_mask, threshold_value, 255, cv2.THRESH_BINARY)
     return smoothed_mask
 
-
+def stretch_mask_vertically(mask):
+    """
+    Растягивает белую область на маске вверх, чтобы убрать зазоры сверху
+    
+    :param mask: Входная маска (numpy array)
+    :return: Маска с растянутой белой областью вверх
+    """
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        raise ValueError("Объект не найден на маске.")
+    
+    # ограничивающий прямоугольник вокруг самого большого контура
+    x, y, w, h = cv2.boundingRect(max(contours, key=cv2.contourArea))
+    
+    # обрезаем белую область объекта
+    cropped_mask = mask[y:y+h, x:x+w]
+    
+    # растягиваем белую область на всю высоту сверху
+    stretched_mask = cv2.resize(cropped_mask, (w, mask.shape[0] - y), interpolation=cv2.INTER_AREA)
+    
+    final_mask = np.zeros_like(mask, dtype=np.uint8) 
+    final_mask[:mask.shape[0] - y, x:x+w] = stretched_mask
+    # x, y, w, h = cv2.boundingRect(max(contours, key=cv2.contourArea))    
+    # cropped_mask = mask[y:y+h, x:x+w]    
+    # stretched_mask = cv2.resize(cropped_mask, (mask.shape[1], mask.shape[0]), interpolation=cv2.INTER_AREA)
+    # final_mask = np.zeros_like(mask, dtype=np.uint8)
+    # final_mask[:, x:x+w] = stretched_mask
+    
+    
+    return final_mask
 
 # загрузка 3D-модели и создание маски
 mesh = trimesh.load(obj_file)
@@ -130,16 +160,9 @@ mask_image = crop_to_content(mask_image)
 cv2.imwrite('mask_croped.jpg', mask_image)
 
 image = cv2.imread(input_image_path)
-image = align_angle(image, 'rotated_orig_cont.jpg')
+image, angle1 = align_angle(image, 'rotated_orig_cont.jpg')
 image_back = cv2.imread(input_image_path_back)
-image_back = align_angle(image_back, 'rotated_orig.jpg')
-
-# центрирование изображения
-image = cv2.imread(input_image_path)
-image = align_angle(image, 'rotated_orig_cont.jpg')  # центрирование изображения для наложения маски
-
-image_back = cv2.imread(input_image_path_back)
-image_back = align_angle(image_back, 'rotated_orig.jpg')  # центрирование фона
+image_back, angle1 = align_angle(image_back, 'rotated_orig.jpg', angle=angle1)
 
 # определение типа фона
 background_type = determine_background(image)
@@ -161,7 +184,8 @@ if contours:
     # масштабирование маски до размеров обрезанного изображения
     resized_mask = cv2.resize(mask_image, (contour_width, contour_height), interpolation=cv2.INTER_AREA)
     _, resized_mask = cv2.threshold(resized_mask, 127, 255, cv2.THRESH_BINARY)
-
+    
+    resized_mask = stretch_mask_vertically(resized_mask)
     # сглаживание краёв маски
     smoothed_mask = smooth_mask_strong(resized_mask)
 
@@ -175,7 +199,7 @@ if contours:
     # вычисление смещения маски относительно центра изображения
     top_left_x = max(0, center_x - mask_x)
     top_left_y = max(0, center_y - mask_y)
-
+    print(top_left_x, top_left_y)
     # наложение сглаженной маски
     mask_full[top_left_y:top_left_y + mask_h, top_left_x:top_left_x + mask_w] = smoothed_mask
     result = cv2.bitwise_and(centered_image_back, centered_image_back, mask=mask_full)
