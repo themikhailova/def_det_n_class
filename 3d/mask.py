@@ -108,7 +108,7 @@ def stretch_mask_vertically(mask):
     """
     Растягивает белую область на маске вверх, чтобы убрать зазоры сверху
     
-    :param mask: Входная маска (numpy array)
+    :param mask: Входная маска (numpy)
     :return: Маска с растянутой белой областью вверх
     """
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
