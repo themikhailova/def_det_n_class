@@ -4,74 +4,155 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import cv2
 import io
+from skimage.feature import hog
+from skimage import exposure
 
 # Шаг 1: Загрузка модели
 input_obj_file = 'details_v1.obj'
 output_mask_file = 'mask.jpg'
 input_image_path = 'det_orig.jpg'
 
+# Функция для извлечения признаков HOG
+def extract_hog_features(image, target_size=(128,128)):
+    """
+    Извлекает признаки HOG из изображения.
+    :param image: Входное изображение (numpy array).
+    :return: Признаки HOG.
+    """
+    # Приводим изображение к одинаковому размеру
+    image_resized = cv2.resize(image, target_size)
+    # Проверяем, если изображение уже в оттенках серого
+    if len(image.shape) == 3:  # Если 3 канала (RGB)
+        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)  # Преобразуем в оттенки серого
+    elif len(image.shape) == 2:  # Если уже одноцветное изображение (оттенки серого)
+        gray_image = image  # Используем изображение как есть
+    else:
+        raise ValueError("Неверное количество каналов в изображении")
+    features, hog_image = hog(gray_image, pixels_per_cell=(8, 8), cells_per_block=(2, 2), visualize=True)
+    hog_image_rescaled = exposure.rescale_intensity(hog_image, in_range=(0, 10))  # Улучшаем визуализацию
+    return features, hog_image_rescaled
+
+# Функция для вычисления разницы между двумя гистограммами HOG
+def compare_hog_features(features1, features2):
+    """
+    Сравнивает два набора признаков HOG.
+    :param features1: Признаки HOG для первого изображения.
+    :param features2: Признаки HOG для второго изображения.
+    :return: Степень различия между признаками (меньше — лучше).
+    """
+    distance = np.linalg.norm(features1 - features2)  # Используем евклидово расстояние
+    return distance
+
+def compare_contours(c1, c2):
+    """
+    Сравнивает два контура с использованием cv2.matchShapes.
+    :param c1: Первый контур.
+    :param c2: Второй контур.
+    :return: Степень различия между контурами.
+    """
+    # Проверяем, что контуры содержат достаточно точек
+    if len(c1) < 5 or len(c2) < 5:
+        print(f"Ошибка: Один из контуров слишком мал. c1: {len(c1)}, c2: {len(c2)}")
+        return float('inf')  # Возвращаем "максимальную разницу"
+
+    # Проверяем масштабы контуров и нормализуем их
+    c1 = np.array(c1, dtype=np.float32)
+    c2 = np.array(c2, dtype=np.float32)
+
+    if np.max(c1) > 0:
+        c1 /= np.max(c1)
+    if np.max(c2) > 0:
+        c2 /= np.max(c2)
+
+    # Сравнение контуров
+    try:
+        difference = cv2.matchShapes(c1, c2, cv2.CONTOURS_MATCH_I1, 0.0)
+    except cv2.error as e:
+        print(f"Ошибка при сравнении контуров: {e}")
+        return float('inf')  # Возвращаем "максимальную разницу"
+
+    return difference
+
 # Функция для обрезки изображения маски
 def crop_to_content(image):
-    # Преобразуем изображение в формат uint8
-    image_uint8 = (image * 255).astype(np.uint8)  # Преобразуем булев массив в [0, 255]
+    image_uint8 = (image * 255).astype(np.uint8)
     coords = cv2.findNonZero(image_uint8)  # Ненулевые пиксели
     if coords is not None:
         x, y, w, h = cv2.boundingRect(coords)  # Ограничивающий прямоугольник
         cropped_image = image_uint8[y:y+h, x:x+w]
         return cropped_image
     else:
-        # Если ненулевые пиксели не найдены, возвращаем исходное изображение
         return image_uint8
 
+# Масштабирование маски до размеров целевого контура
 def resize_mask_to_contour(mask, target_contour):
-    """
-    Масштабирует маску до размеров ограничивающего прямоугольника целевого контура.
-    :param mask: Маска (numpy array), которую нужно масштабировать.
-    :param target_contour: Контур целевого объекта.
-    :return: Масштабированная маска.
-    """
-    # Получаем ограничивающий прямоугольник для целевого контура
     x, y, contour_width, contour_height = cv2.boundingRect(target_contour)
-
-    # Масштабируем маску
     resized_mask = cv2.resize(mask, (contour_width, contour_height), interpolation=cv2.INTER_AREA)
-
-    # Бинаризация после масштабирования
     _, resized_mask = cv2.threshold(resized_mask, 127, 255, cv2.THRESH_BINARY)
-
     return resized_mask
 
+# Функция для комбинированного сравнения
+def combined_comparison(image_real, image_model, contour_real, contour_model):
+    # Сравниваем контуры
+    contour_difference = compare_contours(contour_real, contour_model)
 
-def resize_and_center_mask(mask, target_shape):
-    """
-    Изменяет масштаб и центрирует маску относительно целевого изображения.
-    :param mask: Маска (numpy array), которую нужно изменить.
-    :param target_shape: Размер целевого изображения (высота, ширина).
-    :return: Масштабированная и центрированная маска.
-    """
-    # Получаем размеры маски и целевого изображения
-    mask_h, mask_w = mask.shape
-    target_h, target_w = target_shape
+    # Извлекаем HOG признаки для обоих изображений
+    real_hog_features, _ = extract_hog_features(image_real)
+    model_hog_features, _ = extract_hog_features(image_model)
 
-    # Масштабируем маску до размера целевого изображения
-    scale_x = target_w / mask_w
-    scale_y = target_h / mask_h
-    scale = min(scale_x, scale_y)  # Масштабируем, сохраняя пропорции
-    new_w, new_h = int(mask_w * scale), int(mask_h * scale)
+    # Сравниваем HOG признаки
+    hog_difference = compare_hog_features(real_hog_features, model_hog_features)
+    print('hog: ', hog_difference)
+    print('contour: ', contour_difference)
+    # Общая разница: комбинируем контуры и HOG с одинаковыми весами
+    total_difference = contour_difference + hog_difference
+    return total_difference
 
-    resized_mask = cv2.resize(mask, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+# Основная логика вращения
+def rotation(angle_x, angle_y, angle_z, mesh, largest_contour, target_binary, min_difference, best_rotation):
+    angle_x_rad = np.radians(angle_x)
+    angle_y_rad = np.radians(angle_y)
+    angle_z_rad = np.radians(angle_z)
 
-    # Создаем пустое изображение с размерами целевого изображения
-    centered_mask = np.zeros((target_h, target_w), dtype=np.uint8)
+    # Создаем матрицы поворота
+    rotation_matrix_x = trimesh.transformations.rotation_matrix(angle_x_rad, [1, 0, 0], mesh.centroid)
+    rotation_matrix_y = trimesh.transformations.rotation_matrix(angle_y_rad, [0, 1, 0], mesh.centroid)
+    rotation_matrix_z = trimesh.transformations.rotation_matrix(angle_z_rad, [0, 0, 1], mesh.centroid)
 
-    # Определяем смещения для центрирования
-    offset_x = (target_w - new_w) // 2
-    offset_y = (target_h - new_h) // 2
+    combined_rotation_matrix = np.dot(np.dot(rotation_matrix_x, rotation_matrix_y), rotation_matrix_z)
+    rotated_mesh = mesh.copy()
+    rotated_mesh.apply_transform(combined_rotation_matrix)
+    # Рендерим изображение
+    scene = trimesh.Scene(rotated_mesh)
+    scene.camera.resolution = (512, 512)
+    scene.camera.fov = (90, 90)
+    min_bound, max_bound = rotated_mesh.bounds
+    center_point = (min_bound + max_bound) / 2
+    scene.camera.look_at([center_point], distance=2)
 
-    # Помещаем масштабированную маску в центр нового изображения
-    centered_mask[offset_y:offset_y+new_h, offset_x:offset_x+new_w] = resized_mask
+    image_data = scene.save_image(background=[0, 0, 0, 255])
+    image = Image.open(io.BytesIO(image_data))
+    image_model_np = np.array(image)
 
-    return centered_mask
+    if largest_contour is not None:
+        gray_image = image.convert("L")
+        binary_image = np.array(gray_image.point(lambda x: 255 if x > 1 else 0, mode='1'))
+        cropped_mask = crop_to_content(binary_image)
+
+        resized_mask = resize_mask_to_contour(cropped_mask, largest_contour)
+        cropped_target = crop_to_contour(target_binary, largest_contour)
+
+        mask_contours, _ = cv2.findContours(resized_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        target_contours, _ = cv2.findContours(cropped_target, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Выполняем комбинированное сравнение (контуры + HOG)
+        difference = combined_comparison(cropped_target, resized_mask, mask_contours[0], largest_contour)
+
+        if difference < min_difference:
+            min_difference = difference
+            best_rotation = (angle_x, angle_y, angle_z)
+        print(f"Поворот: ({angle_x}, {angle_y}, {angle_z}) градусов, Разница: {difference}")
+
+    return best_rotation, min_difference
 
 def crop_to_contour(image, contour):
     """
@@ -95,8 +176,13 @@ def align_angle(image, output_path=None, show_result=False):
     :return: Выровненное изображение
     """
     
-    # Преобразование в оттенки серого
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Проверяем, если изображение уже в оттенках серого
+    if len(image.shape) == 3:  # Если 3 канала (RGB)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)  # Преобразуем в оттенки серого
+    elif len(image.shape) == 2:  # Если уже одноцветное изображение (оттенки серого)
+        gray = image  # Используем изображение как есть
+    else:
+        raise ValueError("Неверное количество каналов в изображении")
     
     # Размытие для удаления шума
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -141,70 +227,12 @@ def align_angle(image, output_path=None, show_result=False):
     
     return rotated
 
-def rotation(angle_x, angle_y, angle_z, mesh, largest_contour, target_binary, min_difference, best_rotation):
-    angle_x_rad = np.radians(angle_x)
-    angle_y_rad = np.radians(angle_y)
-    angle_z_rad = np.radians(angle_z)
-
-    # Создаем матрицы поворота
-    rotation_matrix_x = trimesh.transformations.rotation_matrix(angle_x_rad, [1, 0, 0], mesh.centroid)
-    rotation_matrix_y = trimesh.transformations.rotation_matrix(angle_y_rad, [0, 1, 0], mesh.centroid)
-    rotation_matrix_z = trimesh.transformations.rotation_matrix(angle_z_rad, [0, 0, 1], mesh.centroid)
-
-    combined_rotation_matrix = np.dot(np.dot(rotation_matrix_x, rotation_matrix_y), rotation_matrix_z)
-    rotated_mesh = mesh
-    rotated_mesh.apply_transform(combined_rotation_matrix)
-
-    # Создаем сцену и настраиваем камеру
-    scene = trimesh.Scene(rotated_mesh)
-    scene.camera.resolution = (512, 512)
-    scene.camera.fov = (90, 90)
-    min_bound, max_bound = rotated_mesh.bounds
-    center_point = (min_bound + max_bound) / 2
-    scene.camera.look_at([center_point], distance=2)
-
-    # Рендерим изображение
-    image_data = scene.save_image(background=[0, 0, 0, 255])
-    image = Image.open(io.BytesIO(image_data))
-            
-    if largest_contour is not None:
-    # Преобразуем в оттенки серого и бинаризуем
-        gray_image = image.convert("L")
-        binary_image = np.array(gray_image.point(lambda x: 255 if x > 1 else 0, mode='1'))
-        cropped_mask = crop_to_content(binary_image)
-        # Масштабируем маску до размеров контура
-        resized_mask = resize_mask_to_contour(cropped_mask, largest_contour)
-
-        # Обрезаем объект в целевом изображении по контуру
-        cropped_target = crop_to_contour(target_binary, largest_contour)
-
-        # Обрезаем маску аналогично
-        mask_contour = cv2.findContours(resized_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0][0]
-        cropped_mask_resized = crop_to_contour(resized_mask, mask_contour)
-
-        # Сравнение обрезанных контуров
-        mask_contours, _ = cv2.findContours(cropped_mask_resized, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        target_contours, _ = cv2.findContours(cropped_target, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        difference = 0
-        for c1, c2 in zip(mask_contours, target_contours):
-            difference += cv2.matchShapes(c1, c2, cv2.CONTOURS_MATCH_I1, 0.0)
-
-        # Проверяем, если текущий угол дает минимальную разницу
-        if difference < min_difference:
-            min_difference = difference
-            best_rotation = (angle_x, angle_y, angle_z)
-        print(f"Поворот: ({angle_x}, {angle_y}, {angle_z}) градусов, Разница: {difference}")
-
-    return best_rotation, min_difference
-
-
 def rotate_6sides(directions, mesh, largest_contour, target_binary, min_difference, best_rotation):
     for angle_x, angle_y, angle_z in directions:
-        try:
+        # try:
             best_rotation, min_difference = rotation(angle_x, angle_y, angle_z, mesh, largest_contour, target_binary, min_difference, best_rotation)
-        except Exception as e:
-            print(f"Ошибка при обработке углов ({angle_x}, {angle_y}, {angle_z}): {e}")
+        # except Exception as e:
+        #     print(f"Ошибка при обработке углов ({angle_x}, {angle_y}, {angle_z}): {e}")
     return best_rotation, min_difference
 
 def min_rotate(angle_x, angle_y, angle_z, n, m, mesh, min_difference, best_rotation, target_binary):
@@ -224,16 +252,10 @@ def min_rotate(angle_x, angle_y, angle_z, n, m, mesh, min_difference, best_rotat
 
     return best_rotation, min_difference
 
+# Запуск основного кода
 mesh = trimesh.load(input_obj_file)
-
-directions = [
-    (0, 0, 0),       # фронт
-    (180, 0, 0),     # задняя сторона
-    (90, 0, 0),      # слева
-    (270, 0, 0),     # справа
-    (0, 90, 0),      # сверху
-    (0, -90, 0)      # снизу
-]
+directions = [(0, 0, 0), (180, 0, 0), (90, 0, 0), (270, 0, 0), (0, 90, 0), (0, -90, 0)]
+# directions = [(0, 90, 0)]
 
 min_difference = float('inf')
 best_rotation = None
@@ -252,6 +274,27 @@ best_rotation, min_difference = rotate_6sides(directions, mesh, largest_contour,
 print(f"Лучший угол поворота из 6 сторон: {best_rotation}, Минимальная разница: {min_difference}")
 
 angle_x, angle_y, angle_z = best_rotation
-best_rotation, min_difference = min_rotate(angle_x, angle_y, angle_z, 10, 3, mesh, min_difference, best_rotation, target_binary)
+best_rotation, min_difference = min_rotate(angle_x, angle_y, angle_z, 5, 5, mesh, min_difference, best_rotation, target_binary)
 
 print(f"Лучший угол поворота: {best_rotation}, Минимальная разница: {min_difference}")
+angle_x, angle_y, angle_z = best_rotation
+print(angle_x, angle_y, angle_z)
+angle_x_rad = np.radians(angle_x)
+angle_y_rad = np.radians(angle_y)
+angle_z_rad = np.radians(angle_z)
+
+rotation_matrix_x = trimesh.transformations.rotation_matrix(angle_x_rad, [1, 0, 0], mesh.centroid)
+rotation_matrix_y = trimesh.transformations.rotation_matrix(angle_y_rad, [0, 1, 0], mesh.centroid)
+rotation_matrix_z = trimesh.transformations.rotation_matrix(angle_z_rad, [0, 0, 1], mesh.centroid)
+
+combined_rotation_matrix = np.dot(np.dot(rotation_matrix_x, rotation_matrix_y), rotation_matrix_z)
+rotated_mesh = mesh.copy()
+rotated_mesh.apply_transform(combined_rotation_matrix)
+
+# Сохранение повернутой модели
+output_obj_file_rotated = 'rotated_model.obj'
+rotated_mesh.export(output_obj_file_rotated)
+print(f"Повернутая модель сохранена как {output_obj_file_rotated}")
+
+# Визуализация повернутой модели
+rotated_mesh.show()  # Открывает 3D-просмотрщик Trimesh
