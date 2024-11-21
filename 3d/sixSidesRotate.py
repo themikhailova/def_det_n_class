@@ -12,6 +12,49 @@ input_obj_file = 'details_v1.obj'
 output_mask_file = 'mask.jpg'
 input_image_path = 'det_orig.jpg'
 
+def compare_sift(image1, image2):
+    # Преобразуем в серые
+    
+
+    if len(image1.shape) == 3:  # Если 3 канала (RGB)
+        gray1 = cv2.cvtColor(image1, cv2.COLOR_BGR2GRAY)  # Преобразуем в оттенки серого
+    elif len(image1.shape) == 2:  # Если уже одноцветное изображение (оттенки серого)
+        gray1 = image1  # Используем изображение как есть
+    else:
+        raise ValueError("Неверное количество каналов в изображении")
+    
+    if len(image2.shape) == 3:  # Если 3 канала (RGB)
+        gray2 = cv2.cvtColor(image2, cv2.COLOR_BGR2GRAY)  # Преобразуем в оттенки серого
+    elif len(image2.shape) == 2:  # Если уже одноцветное изображение (оттенки серого)
+        gray2 = image2  # Используем изображение как есть
+    else:
+        raise ValueError("Неверное количество каналов в изображении")
+
+    # Создаем объект SIFT
+    sift = cv2.SIFT_create()
+
+    # Находим ключевые точки и дескрипторы
+    kp1, des1 = sift.detectAndCompute(gray1, None)
+    kp2, des2 = sift.detectAndCompute(gray2, None)
+
+    # Сравниваем дескрипторы с помощью BFMatcher
+    bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
+    if des1 is not None:
+        if des2 is not None:
+            matches = bf.match(des1, des2)
+            len_matches = len(matches)
+        else:
+            len_matches = 0
+    else:
+        len_matches = 0
+    
+    # Визуализируем совпадения
+    # img_matches = cv2.drawMatches(image1, kp1, image2, kp2, matches, None)
+    # plt.imshow(img_matches)
+    # plt.show()
+
+    return len_matches
+
 # Функция для извлечения признаков HOG
 def extract_hog_features(image, target_size=(128,128)):
     """
@@ -100,16 +143,19 @@ def combined_comparison(image_real, image_model, contour_real, contour_model):
     real_hog_features, _ = extract_hog_features(image_real)
     model_hog_features, _ = extract_hog_features(image_model)
 
+    sift_comp = compare_sift(image_real, image_model)
+
     # Сравниваем HOG признаки
     hog_difference = compare_hog_features(real_hog_features, model_hog_features)
     print('hog: ', hog_difference)
     print('contour: ', contour_difference)
+    print('sift: ', sift_comp)
     # Общая разница: комбинируем контуры и HOG с одинаковыми весами
     total_difference = contour_difference + hog_difference
     return total_difference
 
 # Основная логика вращения
-def rotation(angle_x, angle_y, angle_z, mesh, largest_contour, target_binary, min_difference, best_rotation):
+def rotation(angle_x, angle_y, angle_z, mesh, largest_contour, target_binary, best_rotation, sift_max):
     angle_x_rad = np.radians(angle_x)
     angle_y_rad = np.radians(angle_y)
     angle_z_rad = np.radians(angle_z)
@@ -125,7 +171,7 @@ def rotation(angle_x, angle_y, angle_z, mesh, largest_contour, target_binary, mi
     # Рендерим изображение
     scene = trimesh.Scene(rotated_mesh)
     scene.camera.resolution = (512, 512)
-    scene.camera.fov = (90, 90)
+    scene.camera.fov = (60, 60)
     min_bound, max_bound = rotated_mesh.bounds
     center_point = (min_bound + max_bound) / 2
     scene.camera.look_at([center_point], distance=2)
@@ -145,14 +191,22 @@ def rotation(angle_x, angle_y, angle_z, mesh, largest_contour, target_binary, mi
         mask_contours, _ = cv2.findContours(resized_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         target_contours, _ = cv2.findContours(cropped_target, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         # Выполняем комбинированное сравнение (контуры + HOG)
-        difference = combined_comparison(cropped_target, resized_mask, mask_contours[0], largest_contour)
+        # difference = combined_comparison(cropped_target, resized_mask, mask_contours[0], largest_contour)
 
-        if difference < min_difference:
-            min_difference = difference
+        # if difference < min_difference:
+        #     min_difference = difference
+        #     best_rotation = (angle_x, angle_y, angle_z)
+
+        sift_comp = compare_sift(cropped_target, resized_mask)
+
+        if sift_max < sift_comp:
+            sift_max = sift_comp
+            print(sift_max, sift_comp)
             best_rotation = (angle_x, angle_y, angle_z)
-        print(f"Поворот: ({angle_x}, {angle_y}, {angle_z}) градусов, Разница: {difference}")
+            
+        print(f"Поворот: ({angle_x}, {angle_y}, {angle_z}) градусов, Разница: {sift_comp}")
 
-    return best_rotation, min_difference
+    return best_rotation, sift_max
 
 def crop_to_contour(image, contour):
     """
@@ -227,15 +281,15 @@ def align_angle(image, output_path=None, show_result=False):
     
     return rotated
 
-def rotate_6sides(directions, mesh, largest_contour, target_binary, min_difference, best_rotation):
+def rotate_6sides(directions, mesh, largest_contour, target_binary,best_rotation, sift_max):
     for angle_x, angle_y, angle_z in directions:
         # try:
-            best_rotation, min_difference = rotation(angle_x, angle_y, angle_z, mesh, largest_contour, target_binary, min_difference, best_rotation)
+            best_rotation, sift_max = rotation(angle_x, angle_y, angle_z, mesh, largest_contour, target_binary, best_rotation, sift_max)
         # except Exception as e:
         #     print(f"Ошибка при обработке углов ({angle_x}, {angle_y}, {angle_z}): {e}")
-    return best_rotation, min_difference
+    return best_rotation, sift_max
 
-def min_rotate(angle_x, angle_y, angle_z, n, m, mesh, min_difference, best_rotation, target_binary):
+def min_rotate(angle_x, angle_y, angle_z, n, m, mesh,best_rotation, target_binary, sift_max):
     start_x = angle_x-n
     start_y = angle_y-n
     start_z = angle_z-n
@@ -244,20 +298,21 @@ def min_rotate(angle_x, angle_y, angle_z, n, m, mesh, min_difference, best_rotat
     end_z = angle_z+n
     for angle_x in range(start_x, end_x, m):  # Поворот по оси X
         for angle_y in range(start_y, end_y, m):  # Поворот по оси Y
-            for angle_z in range(start_z, end_z, m):  # Поворот по оси Z
+            # for angle_z in range(start_z, end_z, m):  # Поворот по оси Z
                 try:
-                    best_rotation, min_difference = rotation(angle_x, angle_y, angle_z, mesh, largest_contour, target_binary, min_difference, best_rotation)
+                    best_rotation, sift_max = rotation(angle_x, angle_y, angle_z, mesh, largest_contour, target_binary, best_rotation, sift_max)
                 except Exception as e:
                     print(f"Ошибка при обработке углов ({angle_x}, {angle_y}, {angle_z}): {e}")
 
-    return best_rotation, min_difference
+    return best_rotation, sift_max
 
 # Запуск основного кода
 mesh = trimesh.load(input_obj_file)
 directions = [(0, 0, 0), (180, 0, 0), (90, 0, 0), (270, 0, 0), (0, 90, 0), (0, -90, 0)]
 # directions = [(0, 90, 0)]
 
-min_difference = float('inf')
+# min_difference = float('inf')
+sift_max = 0
 best_rotation = None
 
 target_image = cv2.imread(input_image_path, cv2.IMREAD_ANYCOLOR)
@@ -269,14 +324,14 @@ contours, _ = cv2.findContours(target_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPRO
 if contours:
     largest_contour = max(contours, key=cv2.contourArea)
 
-best_rotation, min_difference = rotate_6sides(directions, mesh, largest_contour, target_binary, min_difference, best_rotation)
+best_rotation, sift_max = rotate_6sides(directions, mesh, largest_contour, target_binary, best_rotation, sift_max)
 
-print(f"Лучший угол поворота из 6 сторон: {best_rotation}, Минимальная разница: {min_difference}")
+print(f"Лучший угол поворота из 6 сторон: {best_rotation}, Схожесть: {sift_max}")
 
 angle_x, angle_y, angle_z = best_rotation
-best_rotation, min_difference = min_rotate(angle_x, angle_y, angle_z, 5, 5, mesh, min_difference, best_rotation, target_binary)
+best_rotation, sift_max = min_rotate(angle_x, angle_y, angle_z, 20, 3, mesh, best_rotation, target_binary, sift_max)
 
-print(f"Лучший угол поворота: {best_rotation}, Минимальная разница: {min_difference}")
+print(f"Лучший угол поворота: {best_rotation}, Схожесть: {sift_max}")
 angle_x, angle_y, angle_z = best_rotation
 print(angle_x, angle_y, angle_z)
 angle_x_rad = np.radians(angle_x)
