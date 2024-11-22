@@ -7,7 +7,6 @@ import io
 from skimage.feature import hog
 from skimage import exposure
 
-# Шаг 1: Загрузка модели
 input_obj_file = 'details_v1.obj'
 output_mask_file = 'mask.jpg'
 input_image_path = 'det_orig.jpg'
@@ -30,10 +29,8 @@ def compare_sift(image1, image2):
     else:
         raise ValueError("Неверное количество каналов в изображении")
 
-    # Создаем объект SIFT
     sift = cv2.SIFT_create()
 
-    # Находим ключевые точки и дескрипторы
     kp1, des1 = sift.detectAndCompute(gray1, None)
     kp2, des2 = sift.detectAndCompute(gray2, None)
 
@@ -48,43 +45,41 @@ def compare_sift(image1, image2):
     else:
         len_matches = 0
     
-    # Визуализируем совпадения
     # img_matches = cv2.drawMatches(image1, kp1, image2, kp2, matches, None)
     # plt.imshow(img_matches)
     # plt.show()
 
     return len_matches
 
-# Функция для извлечения признаков HOG
-def extract_hog_features(image, target_size=(128,128)):
-    """
-    Извлекает признаки HOG из изображения.
-    :param image: Входное изображение (numpy array).
-    :return: Признаки HOG.
-    """
-    # Приводим изображение к одинаковому размеру
-    image_resized = cv2.resize(image, target_size)
-    # Проверяем, если изображение уже в оттенках серого
-    if len(image.shape) == 3:  # Если 3 канала (RGB)
-        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)  # Преобразуем в оттенки серого
-    elif len(image.shape) == 2:  # Если уже одноцветное изображение (оттенки серого)
-        gray_image = image  # Используем изображение как есть
-    else:
-        raise ValueError("Неверное количество каналов в изображении")
-    features, hog_image = hog(gray_image, pixels_per_cell=(8, 8), cells_per_block=(2, 2), visualize=True)
-    hog_image_rescaled = exposure.rescale_intensity(hog_image, in_range=(0, 10))  # Улучшаем визуализацию
-    return features, hog_image_rescaled
+# def extract_hog_features(image, target_size=(128,128)):
+#     """
+#     Извлекает признаки HOG из изображения.
+#     :param image: Входное изображение (numpy array).
+#     :return: Признаки HOG.
+#     """
+#     # Приводим изображение к одинаковому размеру
+#     image_resized = cv2.resize(image, target_size)
+#     # Проверяем, если изображение уже в оттенках серого
+#     if len(image.shape) == 3:  # Если 3 канала (RGB)
+#         gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)  # Преобразуем в оттенки серого
+#     elif len(image.shape) == 2:  # Если уже одноцветное изображение (оттенки серого)
+#         gray_image = image  # Используем изображение как есть
+#     else:
+#         raise ValueError("Неверное количество каналов в изображении")
+#     features, hog_image = hog(gray_image, pixels_per_cell=(8, 8), cells_per_block=(2, 2), visualize=True)
+#     hog_image_rescaled = exposure.rescale_intensity(hog_image, in_range=(0, 10))  # Улучшаем визуализацию
+#     return features, hog_image_rescaled
 
-# Функция для вычисления разницы между двумя гистограммами HOG
-def compare_hog_features(features1, features2):
-    """
-    Сравнивает два набора признаков HOG.
-    :param features1: Признаки HOG для первого изображения.
-    :param features2: Признаки HOG для второго изображения.
-    :return: Степень различия между признаками (меньше — лучше).
-    """
-    distance = np.linalg.norm(features1 - features2)  # Используем евклидово расстояние
-    return distance
+# # Функция для вычисления разницы между двумя гистограммами HOG
+# def compare_hog_features(features1, features2):
+#     """
+#     Сравнивает два набора признаков HOG.
+#     :param features1: Признаки HOG для первого изображения.
+#     :param features2: Признаки HOG для второго изображения.
+#     :return: Степень различия между признаками (меньше — лучше).
+#     """
+#     distance = np.linalg.norm(features1 - features2)  # Используем евклидово расстояние
+#     return distance
 
 def compare_contours(c1, c2):
     """
@@ -134,25 +129,48 @@ def resize_mask_to_contour(mask, target_contour):
     _, resized_mask = cv2.threshold(resized_mask, 127, 255, cv2.THRESH_BINARY)
     return resized_mask
 
-# Функция для комбинированного сравнения
-def combined_comparison(image_real, image_model, contour_real, contour_model):
-    # Сравниваем контуры
-    contour_difference = compare_contours(contour_real, contour_model)
+# # Функция для комбинированного сравнения
+# def combined_comparison(image_real, image_model, contour_real, contour_model):
+#     # Сравниваем контуры
+#     contour_difference = compare_contours(contour_real, contour_model)
 
-    # Извлекаем HOG признаки для обоих изображений
-    real_hog_features, _ = extract_hog_features(image_real)
-    model_hog_features, _ = extract_hog_features(image_model)
+#     # Извлекаем HOG признаки для обоих изображений
+#     real_hog_features, _ = extract_hog_features(image_real)
+#     model_hog_features, _ = extract_hog_features(image_model)
 
-    sift_comp = compare_sift(image_real, image_model)
+#     sift_comp = compare_sift(image_real, image_model)
 
-    # Сравниваем HOG признаки
-    hog_difference = compare_hog_features(real_hog_features, model_hog_features)
-    print('hog: ', hog_difference)
-    print('contour: ', contour_difference)
-    print('sift: ', sift_comp)
-    # Общая разница: комбинируем контуры и HOG с одинаковыми весами
-    total_difference = contour_difference + hog_difference
-    return total_difference
+#     # Сравниваем HOG признаки
+#     hog_difference = compare_hog_features(real_hog_features, model_hog_features)
+#     print('hog: ', hog_difference)
+#     print('contour: ', contour_difference)
+#     print('sift: ', sift_comp)
+#     # Общая разница: комбинируем контуры и HOG с одинаковыми весами
+#     total_difference = contour_difference + hog_difference
+#     return total_difference
+
+
+
+def look_at(camera_position, target_position, up_vector):
+    # Направление "вперёд" (от камеры к цели)
+    forward = np.array(target_position) - np.array(camera_position)
+    forward = forward / np.linalg.norm(forward)  # Нормализация
+
+    # Направление "вправо" (перпендикуляр к up и forward)
+    right = np.cross(forward, up_vector)
+    right = right / np.linalg.norm(right)
+
+    # Новое направление "вверх" (перпендикуляр к forward и right)
+    up = np.cross(right, forward)
+
+    # Матрица камеры (4x4)
+    camera_matrix = np.eye(4)
+    camera_matrix[:3, 0] = right
+    camera_matrix[:3, 1] = up
+    camera_matrix[:3, 2] = -forward
+    camera_matrix[:3, 3] = camera_position
+
+    return camera_matrix
 
 # Основная логика вращения
 def rotation(angle_x, angle_y, angle_z, mesh, largest_contour, target_binary, best_rotation, sift_max):
@@ -168,17 +186,39 @@ def rotation(angle_x, angle_y, angle_z, mesh, largest_contour, target_binary, be
     combined_rotation_matrix = np.dot(np.dot(rotation_matrix_x, rotation_matrix_y), rotation_matrix_z)
     rotated_mesh = mesh.copy()
     rotated_mesh.apply_transform(combined_rotation_matrix)
-    # Рендерим изображение
+    # Создаём сцену
     scene = trimesh.Scene(rotated_mesh)
-    scene.camera.resolution = (512, 512)
-    scene.camera.fov = (60, 60)
-    min_bound, max_bound = rotated_mesh.bounds
-    center_point = (min_bound + max_bound) / 2
-    scene.camera.look_at([center_point], distance=2)
+    scene.camera.resolution = (256, 256)
+    scene.camera.fov = (90, 90)
+    # Получаем размер модели и её центр
+    bounds = rotated_mesh.bounds  # Границы модели (min, max)
+    center = rotated_mesh.center_mass  # Центр модели
+    size = np.linalg.norm(bounds[1] - bounds[0])  # Размер модели
+
+    # Расположение камеры
+    camera_distance = size 
+    camera_position = [camera_distance, camera_distance, camera_distance]
+    target_position = center  # Камера смотрит на центр модели
+    up_vector = [0, 1, 0]     # Направление вверх
+
+    # Рассчитываем матрицу камеры
+    camera_transform = look_at(camera_position, target_position, up_vector)
+
+    # Применяем трансформацию камеры
+    scene.camera_transform = camera_transform
+
+    # Рендерим изображение
+    # scene = trimesh.Scene(rotated_mesh)
+    # scene.camera.resolution = (128, 128)
+    # scene.camera.fov = (90, 90)
+    
+    # min_bound, max_bound = rotated_mesh.bounds
+    # center_point = (min_bound + max_bound) / 2
+    # scene.camera.look_at([center_point], distance=2)
+    # print(center_point)
 
     image_data = scene.save_image(background=[0, 0, 0, 255])
     image = Image.open(io.BytesIO(image_data))
-    image_model_np = np.array(image)
 
     if largest_contour is not None:
         gray_image = image.convert("L")
@@ -188,8 +228,8 @@ def rotation(angle_x, angle_y, angle_z, mesh, largest_contour, target_binary, be
         resized_mask = resize_mask_to_contour(cropped_mask, largest_contour)
         cropped_target = crop_to_contour(target_binary, largest_contour)
 
-        mask_contours, _ = cv2.findContours(resized_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        target_contours, _ = cv2.findContours(cropped_target, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # mask_contours, _ = cv2.findContours(resized_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # target_contours, _ = cv2.findContours(cropped_target, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         # Выполняем комбинированное сравнение (контуры + HOG)
         # difference = combined_comparison(cropped_target, resized_mask, mask_contours[0], largest_contour)
 
@@ -329,7 +369,7 @@ best_rotation, sift_max = rotate_6sides(directions, mesh, largest_contour, targe
 print(f"Лучший угол поворота из 6 сторон: {best_rotation}, Схожесть: {sift_max}")
 
 angle_x, angle_y, angle_z = best_rotation
-best_rotation, sift_max = min_rotate(angle_x, angle_y, angle_z, 20, 3, mesh, best_rotation, target_binary, sift_max)
+best_rotation, sift_max = min_rotate(angle_x, angle_y, angle_z, 15, 4, mesh, best_rotation, target_binary, sift_max)
 
 print(f"Лучший угол поворота: {best_rotation}, Схожесть: {sift_max}")
 angle_x, angle_y, angle_z = best_rotation
@@ -353,3 +393,4 @@ print(f"Повернутая модель сохранена как {output_obj_
 
 # Визуализация повернутой модели
 rotated_mesh.show()  # Открывает 3D-просмотрщик Trimesh
+
