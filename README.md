@@ -1,10 +1,8 @@
 # def_det_n_class
 Данный проект создается для распознавания и классификации дефектов на различных [деталях](https://drive.google.com/drive/folders/1pdHhjAuZXqzPTgiYeGQCL0cEMqkWQ2TN?usp=sharing)
 
-## Use Case
-![image](https://github.com/user-attachments/assets/023c2d14-cef6-404d-9382-d8a44bb584e7)
 
-## Диаграмма этапов работы программы
+## Диаграмма этапов работы программы (старое)
 ![image](https://github.com/user-attachments/assets/579208f4-3e2a-42c1-8e4f-7430fa185526)
 
 **Цель:** Определить, является ли деталь идеальной или содержит дефекты
