@@ -8,6 +8,7 @@ image = cv2.imread("ourdets/blue/2.jpg")
 start = time.time()
 
 hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+hsv_image = cv2.GaussianBlur(hsv_image, (11,11), 0)
 
 # Установка диапазона цвета для выделения фона (синий в данном случае)
 lower_blue = np.array([100, 50, 50])  # Нижний порог (темно-синий)
