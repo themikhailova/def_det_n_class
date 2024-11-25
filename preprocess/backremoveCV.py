@@ -11,7 +11,7 @@ hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 hsv_image = cv2.GaussianBlur(hsv_image, (11,11), 0)
 
 # пороги синего работают нормально везде, кроме 6го фото (глубокая деталь с тенью внутрь)
-lower_blue = np.array([100, 50, 50])  # Нижний порог (темно-синий) # изменение s с 50 на 120 оставит ненасыщ. блики на детали, а v с 50 на 0 уберет тени
+lower_blue = np.array([100, 120, 0])  # Нижний порог (темно-синий) # изменение s с 50 на 120 оставит ненасыщ. блики на детали, а v с 50 на 0 уберет тени
 upper_blue = np.array([140, 255, 255])  # Верхний порог (светло-синий)
 
 # зеленый - менее универсальный. при следующих порогах на некоторых фото (пр. 4) не до конца убирает внутренние отверстия
@@ -36,8 +36,8 @@ upper_blue = np.array([140, 255, 255])  # Верхний порог (светл�
 
 background_mask = cv2.inRange(hsv_image, lower_blue, upper_blue)
 foreground_mask = cv2.bitwise_not(background_mask)
-# kernel = np.ones((15, 15), np.uint8)  # можно использовать, чтобы заполнить небольшие проплешины
-# foreground_mask = cv2.morphologyEx(foreground_mask, cv2.MORPH_CLOSE, kernel)
+kernel = np.ones((15, 15), np.uint8)  # можно использовать, чтобы заполнить небольшие проплешины
+foreground_mask = cv2.morphologyEx(foreground_mask, cv2.MORPH_CLOSE, kernel)
 gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
 filtered_gray = cv2.bitwise_and(gray_image, gray_image, mask=foreground_mask)
@@ -62,7 +62,7 @@ for i, contour in enumerate(contours):
 mask_holes = cv2.bitwise_not(mask_holes)
 combined_mask = cv2.bitwise_and(mask_outer, foreground_mask)
 
-result_image = cv2.bitwise_and(image, image, mask=combined_mask)
+result_image = cv2.bitwise_and(image, image, mask=foreground_mask)
 
 finish = time.time()
 res_msec = (finish - start) * 1000
