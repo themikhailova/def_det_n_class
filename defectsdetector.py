@@ -213,8 +213,55 @@ def detect_differ(obj_img, ref_img, region_size_ratio=0.05, anomaly_threshold=0.
 
     return result_img, anomalies_mask
 
+def combine_nearby_contours(contours, max_distance=10, max_nearby_contours=5):
+    """
+    Объединяет ближайшие контуры, если они находятся в пределах заданного расстояния.
+    """
+    combined_contours = []
+    used = [False] * len(contours)  # Массив для отслеживания уже объединённых контуров
 
-def detect_and_save_anomalies(input_image, reference_image, output_folder, threshold=50, region_size=0.05, min_anomaly_size=100, dilate_iter=5):
+    for i in range(len(contours)):
+        if used[i]:
+            continue
+
+        # Начинаем новый комбинированный контур с текущего
+        combined_contour = contours[i]
+        used[i] = True
+
+        # Получаем центроид текущего контура
+        moments = cv2.moments(combined_contour)
+        if moments['m00'] == 0:
+            continue 
+         # Пропускаем контуры с нулевой площадью
+        cX = int(moments['m10'] / moments['m00'])
+        cY = int(moments['m01'] / moments['m00'])
+
+        # Смотрим на остальные контуры и добавляем их, если они близки
+        for j in range(i + 1, len(contours)):
+            if used[j]:
+                continue
+
+            # Получаем центроид второго контура
+            moments2 = cv2.moments(contours[j])
+            if moments2['m00'] == 0:
+                continue 
+            cX2 = int(moments2['m10'] / moments2['m00'])
+            cY2 = int(moments2['m01'] / moments2['m00'])
+
+            # Рассчитываем расстояние между центроидами
+            distance = np.sqrt((cX - cX2) ** 2 + (cY - cY2) ** 2)
+
+            # Если расстояние меньше максимального порога, объединяем контуры
+            if distance < max_distance:
+                combined_contour = np.concatenate((combined_contour, contours[j]), axis=0)
+                used[j] = True  # Отмечаем второй контур как использованный
+
+        # Добавляем объединённый контур в список
+        combined_contours.append(combined_contour)
+
+    return combined_contours
+
+def detect_and_save_anomalies(input_image, reference_image, output_folder, threshold=50, region_size=0.05, min_anomaly_size=10, dilate_iter=5):
     """
     Основной алгоритм обнаружения аномалий и их сохранения в виде отдельных изображений.
     """
@@ -229,19 +276,22 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
     # cv2.waitKey(0)
     reference_gray = cv2.GaussianBlur(reference_gray, (5, 5), 0)
     highlighted_result, detailed_mask = detect_and_highlight_anomalies(input_gray, reference_gray)
+
+    
     _, differ = detect_differ(input_gray, reference_gray)
+
     diff = cv2.absdiff(input_gray, reference_gray)
-    _, anomalies = cv2.threshold(diff, 40, 255, cv2.THRESH_BINARY)
+    _, anomalies = cv2.threshold(diff, 1000, 255, cv2.THRESH_BINARY)
     cv2.imshow('differ', differ)
     cv2.imshow('detailed_mask', detailed_mask)
     combined_anomalies = cv2.bitwise_and(detailed_mask, differ)
     # kernel = np.ones((3, 3), np.uint8)
-    # combined_anomalies = cv2.dilate(anomalies, kernel)
+    # combined_anomalies = cv2.dilate(combined_anomalies, kernel)
     cv2.imshow('combined_anomalies', combined_anomalies)
     cv2.waitKey(0)
     # Поиск контуров
     contours, _ = cv2.findContours(combined_anomalies, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
+    contours = combine_nearby_contours(contours)
     test = input_image.copy()
     anomaly_index = 0
     print(len(contours))
@@ -261,7 +311,7 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
         #     continue
         cv2.drawContours(test, [contour], -1, (255, 255, 255), 2) 
         ellipse = cv2.fitEllipse(contour)
-        ellipse = increase_ellipse(ellipse, scale_factor=1.3)
+        ellipse = increase_ellipse(ellipse, scale_factor=1.5)
 
         # Рассчитываем характеристики
         features = calculate_features(contour, output_gray)
@@ -280,7 +330,7 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
             cv2.ellipse(output_image, ellipse, colour, 2)
             # Выделяем аномальную область и сохраняем ее       
             anomaly_filename = f"{output_folder}/anomaly_{anomaly_index}.png"
-            cv2.imwrite(anomaly_filename, output_image)
+            # cv2.imwrite(anomaly_filename, output_image)
             print(anomaly_filename)
             anomaly_index += 1
         else:
@@ -290,9 +340,9 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
     return output_image
 
 # Загрузка изображений
-input_image = cv2.imread("./1.jpg")
-reference_image = cv2.imread("./2.jpg")
-output_folder = "./output_anomalies2/"
+input_image = cv2.imread("./ourdets/blue/refAnddef/def.jpg")
+reference_image = cv2.imread("./ourdets/blue/refAnddef/1/ref.jpg")
+output_folder = "./output_anomalies/"
 
 start = time.time()
 # Обнаружение аномалий и сохранение результатов
