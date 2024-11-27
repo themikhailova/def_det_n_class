@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
+from skimage.metrics import structural_similarity as ssim
 import time
+from skimage import io, filters, morphology
 
 # Функция для расчета характеристик
 def calculate_features(contour, image_gray):
@@ -71,70 +73,148 @@ def increase_ellipse(ellipse, scale_factor=1.2):
     # Возвращаем увеличенный эллипс
     return (center, (new_major_axis, new_minor_axis), angle)
 
-def compare_neighboring_regions(image, region_size=0.05, threshold=8, contour_area_threshold=300): 
-    """
-    Сравнение соседних областей изображения для обнаружения аномалий с выделением контуров.
-    """
-    h, w = image.shape
-    region_h, region_w = int(h * region_size), int(w * region_size)
-    
-    # Вычисление средней яркости и стандартного отклонения в каждой области
-    anomaly_map = np.zeros_like(image, dtype=np.uint8)
-    real_anomaly_map = np.zeros_like(image, dtype=np.uint8)
-    # Обработка изображения для поиска аномальных областей
+def detect_and_highlight_anomalies(obj_img, ref_img, region_size_ratio=0.05, anomaly_threshold=0.7, pixel_diff_threshold=30):
+    # Проверка размеров
+    if obj_img.shape != ref_img.shape:
+        raise ValueError("Размеры изображения объекта и эталонного изображения должны совпадать")
+
+    # Размер области для анализа
+    h, w = obj_img.shape
+    region_h = int(h * region_size_ratio)
+    region_w = int(w * region_size_ratio)
+
+    region_h = max(1, region_h)
+    region_w = max(1, region_w)
+
+    # Создание маски объекта
+    _, object_mask = cv2.threshold(obj_img, 1, 255, cv2.THRESH_BINARY)
+    # cv2.imshow('obj_img', obj_img)
+    # cv2.imshow('massssk', object_mask)
+    # cv2.waitKey(0)
+    # Результирующее изображение
+    result_img = cv2.cvtColor(obj_img, cv2.COLOR_GRAY2BGR)  # Для цветного выделения
+    anomalies_mask = np.zeros_like(obj_img, dtype=np.uint8)
+
+    # Проход по сетке областей
     for y in range(0, h, region_h):
         for x in range(0, w, region_w):
             # Текущая область
-            region = image[y:y+region_h, x:x+region_w]
-            mean_region = np.mean(region)
-            
-            # Сравнение с соседними областями
-            neighbors = []
-            for dy in [-1, 0, 1]:
-                for dx in [-1, 0, 1]:
-                    if dx == 0 and dy == 0:
-                        continue
-                    ny, nx = y + dy * region_h, x + dx * region_w
-                    if 0 <= ny < h and 0 <= nx < w:
-                        neighbor_region = image[ny:ny+region_h, nx:nx+region_w]
-                        neighbors.append(np.mean(neighbor_region))
-            
-            if neighbors:
-                mean_neighbors = np.mean(neighbors)
-                if abs(mean_region - mean_neighbors) > threshold:
-                    # Обозначение области как аномальной
-                    anomaly_map[y:y+region_h, x:x+region_w] = 255
+            region = obj_img[y:y+region_h, x:x+region_w]
+            region_mask = object_mask[y:y+region_h, x:x+region_w]
 
-    # Найдем контуры на исходном изображении в аномальных областях, помеченных в anomaly_map
-    result_image = np.copy(image)  # Копия исходного изображения для рисования
+            # Если область вне объекта, пропускаем
+            if cv2.countNonZero(region_mask) == 1:
+                continue
 
-    # Применяем маску anomaly_map для выделения только аномальных областей
-    masked_image = cv2.bitwise_and(result_image, result_image, mask=cv2.bitwise_not(anomaly_map))
+            # Определяем координаты окружения
+            surrounding_top = max(0, y - region_h)
+            surrounding_bottom = min(h, y + 2 * region_h)
+            surrounding_left = max(0, x - region_w)
+            surrounding_right = min(w, x + 2 * region_w)
+
+            # Окружение (с учётом маски объекта)
+            surrounding = obj_img[surrounding_top:surrounding_bottom, surrounding_left:surrounding_right]
+            surrounding_mask = object_mask[surrounding_top:surrounding_bottom, surrounding_left:surrounding_right]
+
+            # Исключаем текущую область из окружения
+            mask = np.ones_like(surrounding, dtype=bool)
+            mask[y - surrounding_top:y + region_h - surrounding_top, 
+                 x - surrounding_left:x + region_w - surrounding_left] = False
+            surrounding_values = surrounding[mask & (surrounding_mask > 0)]  # Учитываем только объект
+            
+            # Если окружение пустое, пропускаем
+            if len(surrounding_values) == 0:
+                continue
+
+            # Вычисление средней интенсивности окружения
+            surrounding_mean = np.mean(surrounding_values)
+
+            # Разница между текущей областью и окружением
+            region_diff = np.abs(region.astype(np.float32) - surrounding_mean)
+
+            # Выделение аномальных пикселей по порогу
+            _, binary_diff = cv2.threshold(region_diff, pixel_diff_threshold, 255, cv2.THRESH_BINARY)
+            binary_diff = binary_diff.astype(np.uint8)
+
+            # Добавляем к общей маске
+            anomalies_mask[y:y+region_h, x:x+region_w] = cv2.bitwise_or(anomalies_mask[y:y+region_h, x:x+region_w], binary_diff)
+            
+    # Морфологическая обработка маски
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (27, 27))
+    processed_mask = cv2.morphologyEx(anomalies_mask, cv2.MORPH_CLOSE, kernel)
     
-    # Применяем алгоритм Кэнни для поиска краев в аномальных областях
-    edges = cv2.Canny(image, 100, 200)  # Алгоритм Кэнни для поиска краев
-
-    # Поиск контуров на изображении с краями
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Рисуем контуры, пропуская слишком большие (по площади) прямоугольные контуры
+    # Поиск контуров аномалий
+    contours, _ = cv2.findContours(processed_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # contours2, _ = cv2.findContours(object_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # largest_contour = max(contours2, key=cv2.contourArea)
+    
+    # Отрисовка контуров на изображении
     for contour in contours:
-        # Вычисляем площадь контура
-        area = cv2.contourArea(contour)
-        cv2.drawContours(result_image, [contour], -1, (255, 0, 0), 2) 
-        if area > contour_area_threshold and area < 10000:  # Фильтруем контуры по площади
-            print(area)
-            cv2.drawContours(real_anomaly_map, [contour], -1, (255, 255, 255), 2)  
-
-    # cv2.imshow('result_image', result_image)
+        if cv2.contourArea(contour) > 5:  # Игнорируем слишком маленькие области
+            cv2.drawContours(result_img, [contour], -1, (0, 0, 255), 2)  # Красные контуры
+    _, mask = cv2.threshold(obj_img, 1, 255, cv2.THRESH_BINARY)
+    anomalies_mask = cv2.bitwise_and(anomalies_mask, anomalies_mask, mask=mask)
+    # cv2.imshow('hjasd', result)
     # cv2.waitKey(0)
-    masked_image = cv2.bitwise_and(result_image, result_image, mask=cv2.bitwise_not(anomaly_map))
+    return result_img, anomalies_mask
 
-    return result_image, anomaly_map
-    
-    
+def detect_differ(obj_img, ref_img, region_size_ratio=0.05, anomaly_threshold=0.7, pixel_diff_threshold=30):
+    # Загрузка изображений
+    # obj_img = cv2.imread(object_image, cv2.IMREAD_GRAYSCALE)
+    # ref_img = cv2.imread(reference_image, cv2.IMREAD_GRAYSCALE)
 
-def detect_and_save_anomalies(input_image, reference_image, output_folder, threshold=80, region_size=0.05, min_anomaly_size=100, dilate_iter=5):
+    # Проверка размеров
+    if obj_img.shape != ref_img.shape:
+        raise ValueError("Размеры изображения объекта и эталонного изображения должны совпадать")
+
+    # Размер области для анализа
+    h, w = obj_img.shape
+    region_h = int(h * region_size_ratio)
+    region_w = int(w * region_size_ratio)
+
+    region_h = max(1, region_h)
+    region_w = max(1, region_w)
+
+    # Результирующее изображение
+    result_img = cv2.cvtColor(obj_img, cv2.COLOR_GRAY2BGR)  # Для цветного выделения
+    anomalies_mask = np.zeros_like(obj_img, dtype=np.uint8)
+
+    # Проход по сетке областей
+    for y in range(0, h, region_h):
+        for x in range(0, w, region_w):         
+            # Получаем текущую область
+            obj_region = obj_img[y:y+region_h, x:x+region_w]
+            ref_region = ref_img[y:y+region_h, x:x+region_w]
+
+            # Сравнение областей
+            if obj_region.shape == ref_region.shape and obj_region.size > 0:
+                score, _ = ssim(obj_region, ref_region, full=True)
+                if score < anomaly_threshold:
+                    # Рассчитываем разницу
+                    diff = cv2.absdiff(obj_region, ref_region)
+
+                    # Выделение аномальных пикселей по порогу
+                    _, binary_diff = cv2.threshold(diff, pixel_diff_threshold, 255, cv2.THRESH_BINARY)
+
+                    # Добавляем к общей маске
+                    anomalies_mask[y:y+region_h, x:x+region_w] = binary_diff
+
+    # Морфологическая обработка маски
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (27, 27))
+    processed_mask = cv2.morphologyEx(anomalies_mask, cv2.MORPH_CLOSE, kernel)
+    
+    # Поиск контуров аномалий
+    contours, _ = cv2.findContours(processed_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Отрисовка контуров на изображении
+    for contour in contours:
+        if cv2.contourArea(contour) > 5:  # Игнорируем слишком маленькие области
+            cv2.drawContours(result_img, [contour], -1, (0, 0, 255), 2)  # Красные контуры
+
+    return result_img, anomalies_mask
+
+
+def detect_and_save_anomalies(input_image, reference_image, output_folder, threshold=50, region_size=0.05, min_anomaly_size=100, dilate_iter=5):
     """
     Основной алгоритм обнаружения аномалий и их сохранения в виде отдельных изображений.
     """
@@ -143,47 +223,26 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
     # Преобразование в градации серого
     input_gray = cv2.cvtColor(input_image, cv2.COLOR_BGR2GRAY)
     reference_gray = cv2.cvtColor(reference_image, cv2.COLOR_BGR2GRAY)
-    
-    # Вычисление разницы между изображениями
+
+    # cv2.imshow('img', input_gray)
+    # cv2.imshow('reference_gray', reference_gray)
+    # cv2.waitKey(0)
+    reference_gray = cv2.GaussianBlur(reference_gray, (5, 5), 0)
+    highlighted_result, detailed_mask = detect_and_highlight_anomalies(input_gray, reference_gray)
+    _, differ = detect_differ(input_gray, reference_gray)
     diff = cv2.absdiff(input_gray, reference_gray)
-    # cv2.imshow('diff', diff)
-    # cv2.waitKey(0)
-    # Применение порога для выделения аномалий
-    _, anomalies = cv2.threshold(diff, threshold, 255, cv2.THRESH_BINARY)
-    anomalies_contours, _ = cv2.findContours(anomalies, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    largest =  max(anomalies_contours, key=cv2.contourArea)
-    cv2.drawContours(anomalies, [largest], -1, (0, 0, 0), 16)
-    # cv2.drawContours(diff, [largest], -1, (0, 0, 0), 16)
-
-    # cv2.imshow('diff', diff)
-    # cv2.waitKey(0)
-    # cv2.imshow('anomalies', anomalies)
-    # cv2.waitKey(0)
-    # Обнаружение аномалий на основе соседних областей
-    # _, region_anomalies = compare_neighboring_regions(input_gray, region_size=region_size)
-    # cv2.imshow('region_anomalies', region_anomalies)
-    # cv2.waitKey(0)
-    # Комбинирование результатов
-    # combined_anomalies = cv2.bitwise_and(anomalies, anomalies)
-    # cv2.imshow('combined_anomalies', combined_anomalies)
-    # cv2.waitKey(0)
-
-    # Увеличение аномалий для объединения близко расположенных, iterations=dilate_iter
-    kernel = np.ones((3, 3), np.uint8)
-    combined_anomalies = cv2.dilate(anomalies, kernel)
-    
+    _, anomalies = cv2.threshold(diff, 40, 255, cv2.THRESH_BINARY)
+    cv2.imshow('differ', differ)
+    cv2.imshow('detailed_mask', detailed_mask)
+    combined_anomalies = cv2.bitwise_and(detailed_mask, differ)
+    # kernel = np.ones((3, 3), np.uint8)
+    # combined_anomalies = cv2.dilate(anomalies, kernel)
+    cv2.imshow('combined_anomalies', combined_anomalies)
+    cv2.waitKey(0)
     # Поиск контуров
-    
     contours, _ = cv2.findContours(combined_anomalies, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    finish_con = time.time()
-
-        # Вывод времени выполнения
-    res_msec_con = (finish_con - start_con) 
-    print('Время работы на одном кадре в миллисекундах: ', res_msec_con)
-    # cv2.imshow('combined_anomalies', combined_anomalies)
-    # cv2.waitKey(0)
-    # Рисование контуров и сохранение аномалий
     
+    test = input_image.copy()
     anomaly_index = 0
     print(len(contours))
     for contour in contours:
@@ -198,10 +257,12 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
         # Извлечение признаков
         area = cv2.contourArea(contour)
         print(area)
-        if area > 18000:
-            continue
+        # if area > 18000:
+        #     continue
+        cv2.drawContours(test, [contour], -1, (255, 255, 255), 2) 
         ellipse = cv2.fitEllipse(contour)
         ellipse = increase_ellipse(ellipse, scale_factor=1.3)
+
         # Рассчитываем характеристики
         features = calculate_features(contour, output_gray)
 
@@ -210,21 +271,28 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
 
         # Добавление метки на изображение
         x, y, w, h = cv2.boundingRect(contour)
-        cv2.putText(output_image, anomaly_type, (x, y - 30), cv2.FONT_HERSHEY_COMPLEX, 0.5, colour, 2)
-        cv2.ellipse(output_image, ellipse, colour, 2)
-        
-        # Выделяем аномальную область и сохраняем ее       
-        anomaly_filename = f"{output_folder}/anomaly_{anomaly_index}.png"
-        cv2.imwrite(anomaly_filename, output_image)
-
-        anomaly_index += 1
-
+        if (
+        np.all(np.isfinite(ellipse[0])) and  # Координаты центра корректны
+        np.all(np.isfinite(ellipse[1])) and  # Размеры осей корректны
+        ellipse[1][0] > 0 and ellipse[1][1] > 0  # Размеры осей больше 0
+        ):
+            cv2.putText(output_image, anomaly_type, (x, y - 30), cv2.FONT_HERSHEY_COMPLEX, 0.5, colour, 2)
+            cv2.ellipse(output_image, ellipse, colour, 2)
+            # Выделяем аномальную область и сохраняем ее       
+            anomaly_filename = f"{output_folder}/anomaly_{anomaly_index}.png"
+            cv2.imwrite(anomaly_filename, output_image)
+            print(anomaly_filename)
+            anomaly_index += 1
+        else:
+            print(f"Некорректный эллипс: {ellipse}")
+    cv2.imshow('test', test)
+    cv2.waitKey(0)
     return output_image
 
 # Загрузка изображений
-input_image = cv2.imread("./ourdets/blue/refAnddef/def.jpg")
-reference_image = cv2.imread("./ourdets/blue/refAnddef/1/ref.jpg")
-output_folder = "./output_anomalies/"
+input_image = cv2.imread("./1.jpg")
+reference_image = cv2.imread("./2.jpg")
+output_folder = "./output_anomalies2/"
 
 start = time.time()
 # Обнаружение аномалий и сохранение результатов
