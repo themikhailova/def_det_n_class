@@ -7,7 +7,6 @@
 
 ## Пример удаления фона
 ![image](https://github.com/user-attachments/assets/14129158-73c2-4003-804c-9874415e6d66)
-![Диаграмма без названия](https://github.com/user-attachments/assets/e818e9de-4531-48a6-a56e-aa65e59ca40b)
 
 
 
