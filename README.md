@@ -2,7 +2,8 @@
 Данный проект создается для распознавания и классификации дефектов на различных [деталях](https://drive.google.com/drive/folders/1pdHhjAuZXqzPTgiYeGQCL0cEMqkWQ2TN?usp=sharing)
 
 ## Use case
-![image](https://github.com/user-attachments/assets/317e29a9-b4a1-4b9b-b48d-06c9ba7edca6)
+![image](https://github.com/user-attachments/assets/4b772e41-2570-4fcd-827f-5347776f7999)
+![image](https://github.com/user-attachments/assets/bea04a1a-40c9-42d6-bc03-c763c98af2fe)
 
 
 ## Пример удаления фона
