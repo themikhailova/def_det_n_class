@@ -5,7 +5,8 @@
 ![image](https://github.com/user-attachments/assets/471b8813-e1eb-4570-af9c-207a7778b27f)
 
 ## Пример удаления фона
-![image](https://github.com/user-attachments/assets/a2c58498-e165-4452-b19f-d3a1c5a0da8a)
+![image](https://github.com/user-attachments/assets/14129158-73c2-4003-804c-9874415e6d66)
+
 
 
 ## Пример выделения аномалии
