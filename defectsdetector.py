@@ -4,8 +4,10 @@ from skimage.metrics import structural_similarity as ssim
 import time
 from skimage import io, filters, morphology
 
-# расчет характеристик для выделения аномалий
 def calculate_features(contour, image_gray):
+    '''
+    расчет характеристик для классификации аномалий
+    '''
     features = {}
 
     # площадь и периметр
@@ -47,8 +49,10 @@ def calculate_features(contour, image_gray):
 
     return features
 
-# классификации
 def classify_anomaly(features):
+    '''
+    классификация аномалий
+    '''
     print(features['aspect_ratio'], features['compactness'], features['area'], features['eccentricity'], features['mean_intensity'])
     if features['aspect_ratio'] > 0.9 and features['compactness'] > 15 and features['eccentricity'] > 0.6:
         return 'Scratch', (255, 0, 0)  # царапина - синий
@@ -63,8 +67,10 @@ def classify_anomaly(features):
     else:
         return 'Unknown', (0, 255, 255)  # неизвестная аномалия - желтный
 
-# увеличение ограничивающего эллипса
 def increase_ellipse(ellipse, scale_factor=1.2):
+    '''
+    увеличение ограничивающего
+    '''
     center, axes, angle = ellipse
     major_axis, minor_axis = axes
 
@@ -75,6 +81,9 @@ def increase_ellipse(ellipse, scale_factor=1.2):
     return (center, (new_major_axis, new_minor_axis), angle)
 
 def detect_and_highlight_anomalies(obj_img, ref_img, region_size_ratio=0.05, anomaly_threshold=0.7, pixel_diff_threshold=30):
+    '''
+    выделение аномалий при сравнении регионов фото с окружением
+    '''
     if obj_img.shape != ref_img.shape:
         raise ValueError("Размеры изображения объекта и эталонного изображения должны совпадать")
 
@@ -156,6 +165,9 @@ def detect_and_highlight_anomalies(obj_img, ref_img, region_size_ratio=0.05, ano
     return result_img, anomalies_mask
 
 def detect_differ(obj_img, ref_img, region_size_ratio=0.05, anomaly_threshold=0.7, pixel_diff_threshold=30):
+    '''
+    выделение аномалий при сравнении фото с эталоном
+    '''
     if obj_img.shape != ref_img.shape:
         raise ValueError("Размеры изображения объекта и эталонного изображения должны совпадать")
 
