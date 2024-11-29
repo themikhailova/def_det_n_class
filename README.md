@@ -10,7 +10,7 @@
 
 
 ## Пример выделения аномалии
-![image](https://github.com/user-attachments/assets/67ab6c30-e64c-4e8c-9f40-de3114a10603) ![image](https://github.com/user-attachments/assets/0273fc47-8d7b-4f19-9442-d1a692d044f3)
+![image](https://github.com/user-attachments/assets/9ae90e4b-6d54-4250-9d05-0a0391a0eee3)
 
 
 
