@@ -216,53 +216,53 @@ def detect_differ(obj_img, ref_img, region_size_ratio=0.05, anomaly_threshold=0.
 
     return result_img, anomalies_mask
 
-# объединение ближайших контуров
-def combine_nearby_contours(contours, max_distance=10, max_nearby_contours=5):
-    '''
-    объединяет ближайшие контуры, если они находятся в пределах заданного расстояния
-    '''
-    combined_contours = []
-    used = [False] * len(contours)  # массив для отслеживания уже объединённых контуров
+# # объединение ближайших контуров
+# def combine_nearby_contours(contours, max_distance=10, max_nearby_contours=5):
+#     '''
+#     объединяет ближайшие контуры, если они находятся в пределах заданного расстояния
+#     '''
+#     combined_contours = []
+#     used = [False] * len(contours)  # массив для отслеживания уже объединённых контуров
 
-    for i in range(len(contours)):
-        if used[i]:
-            continue
+#     for i in range(len(contours)):
+#         if used[i]:
+#             continue
 
-        combined_contour = contours[i]
-        used[i] = True
+#         combined_contour = contours[i]
+#         used[i] = True
 
-        # центроид текущего контура
-        moments = cv2.moments(combined_contour)
-        if moments['m00'] == 0:
-            continue 
+#         # центроид текущего контура
+#         moments = cv2.moments(combined_contour)
+#         if moments['m00'] == 0:
+#             continue 
         
-        # пропуск контуро с нулевой площадью
-        cX = int(moments['m10'] / moments['m00'])
-        cY = int(moments['m01'] / moments['m00'])
+#         # пропуск контуро с нулевой площадью
+#         cX = int(moments['m10'] / moments['m00'])
+#         cY = int(moments['m01'] / moments['m00'])
 
-        # если контуры близки - объединяем
-        for j in range(i + 1, len(contours)):
-            if used[j]:
-                continue
+#         # если контуры близки - объединяем
+#         for j in range(i + 1, len(contours)):
+#             if used[j]:
+#                 continue
 
-            # центроид второго контура
-            moments2 = cv2.moments(contours[j])
-            if moments2['m00'] == 0:
-                continue 
-            cX2 = int(moments2['m10'] / moments2['m00'])
-            cY2 = int(moments2['m01'] / moments2['m00'])
+#             # центроид второго контура
+#             moments2 = cv2.moments(contours[j])
+#             if moments2['m00'] == 0:
+#                 continue 
+#             cX2 = int(moments2['m10'] / moments2['m00'])
+#             cY2 = int(moments2['m01'] / moments2['m00'])
 
-            # расстояние между центроидами
-            distance = np.sqrt((cX - cX2) ** 2 + (cY - cY2) ** 2)
+#             # расстояние между центроидами
+#             distance = np.sqrt((cX - cX2) ** 2 + (cY - cY2) ** 2)
 
-            # если расстояние меньше максимального порога, объединяем контуры
-            if distance < max_distance:
-                combined_contour = np.concatenate((combined_contour, contours[j]), axis=0)
-                used[j] = True  # отметка второго контура как использованного
+#             # если расстояние меньше максимального порога, объединяем контуры
+#             if distance < max_distance:
+#                 combined_contour = np.concatenate((combined_contour, contours[j]), axis=0)
+#                 used[j] = True  # отметка второго контура как использованного
 
-        combined_contours.append(combined_contour)
+#         combined_contours.append(combined_contour)
 
-    return combined_contours
+#     return combined_contours
 
 def detect_and_save_anomalies(input_image, reference_image, output_folder, threshold=50, region_size=0.05, min_anomaly_size=10, dilate_iter=5):
     '''
@@ -296,7 +296,7 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
     # поиск контуров
     contours, _ = cv2.findContours(combined_anomalies, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     # объединение ближайших контуров
-    contours = combine_nearby_contours(contours)
+    # contours = combine_nearby_contours(contours)
     test = input_image.copy()
     anomaly_index = 0
     for contour in contours:
