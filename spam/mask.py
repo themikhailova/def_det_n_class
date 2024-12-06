@@ -4,11 +4,11 @@ from PIL import Image, ImageOps
 import io
 import cv2
 
-obj_file = 'rotated_model.obj'  # путь к .obj модели
+obj_file = './3d/rotated_model_v3.obj'  # путь к .obj модели
 mask_output_file = 'output.jpg'  # путь для сохранения маски
-input_image_path_back = '9.jpg'  # входное изображение детали (фон)
-output_image_path = 'det_masked_output.jpg'  # путь для сохранения результата
-input_image_path = 'det_orig.jpg'  # входное изображение
+input_image_path_back = './details/32.jpg'  # входное изображение детали (фон)
+output_image_path = '32det_masked_output.jpg'  # путь для сохранения результата
+input_image_path = './3d/32noback.jpg'  # входное изображение
 
 def align_angle(image, output_path=None, show_result=False, angle=None):
     """
@@ -204,9 +204,9 @@ cv2.imwrite('mask_croped.jpg', mask_image)
 
 
 image = cv2.imread(input_image_path)
-image, angle1 = align_angle(image, 'rotated_orig_cont.jpg')
+# image, angle1 = align_angle(image, 'rotated_orig_cont.jpg')
 image_back = cv2.imread(input_image_path_back)
-image_back, angle1 = align_angle(image_back, 'rotated_orig.jpg', angle=angle1)
+# image_back, angle1 = align_angle(image_back, 'rotated_orig.jpg', angle=angle1)
 
 # определение типа фона
 background_type = determine_background(image)
@@ -226,7 +226,7 @@ if contours:
     centered_image_back = crop_to_contour_img(image_back, largest_contour)
     
     # масштабирование маски до размеров обрезанного изображения
-    resized_mask = cv2.resize(mask_image, (contour_width+40, contour_height), interpolation=cv2.INTER_AREA)
+    resized_mask = cv2.resize(mask_image, (contour_width, contour_height), interpolation=cv2.INTER_AREA)
 
     # resized_mask = crop_to_contour_img(resized_mask, largest_contour)
     _, resized_mask = cv2.threshold(resized_mask, 127, 255, cv2.THRESH_BINARY)
@@ -240,8 +240,8 @@ if contours:
     cv2.waitKey(0)
     #resized_mask = stretch_mask_vertically(resized_mask)
     # сглаживание краёв маски
-    # smoothed_mask = smooth_mask_strong(resized_mask)
-    smoothed_mask = resized_mask
+    smoothed_mask = smooth_mask_strong(resized_mask)
+    # smoothed_mask = resized_mask
     # центрирование маски на изображении
     h, w = centered_image.shape[:2]
     mask_full = np.zeros((h, w), dtype=np.uint8)
