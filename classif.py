@@ -109,3 +109,132 @@ print(classify_image(df_new_data))
 # # Если нужно декодировать предсказания
 # decoded_predictions = label_encoder.inverse_transform(predictions)
 # print(decoded_predictions)
+
+
+
+
+'''
+import pandas as pd
+import numpy as np
+import pickle
+from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score
+import os
+
+def load_data(file_path):
+    data = pd.read_excel(file_path)
+    features = data[['Compactness', 'Eccentricity', 'Aspect Ratio', 'Mean Intensity']]
+    labels = data['Y']
+    return features, labels
+
+def preprocess_data(features, labels):
+    label_encoder = LabelEncoder()
+    labels = label_encoder.fit_transform(labels)
+    X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.2, random_state=42, stratify=labels)
+    return X_train, X_test, y_train, y_test, label_encoder
+
+def perform_grid_search(model, param_grid, X_train, y_train):
+    grid_search = GridSearchCV(model, param_grid, cv=5, scoring='accuracy', n_jobs=-1, verbose=2)
+    grid_search.fit(X_train, y_train)
+    print(f"Лучшие параметры для {model.__class__.__name__}: {grid_search.best_params_}")
+    return grid_search.best_estimator_
+
+def define_models_with_tuning(X_train, y_train):
+    # Random Forest
+    rf_param_grid = {
+        'n_estimators': [50, 100, 200],
+        'max_depth': [None, 10, 20],
+        'min_samples_split': [2, 5, 10],
+        'min_samples_leaf': [1, 2, 4]
+    }
+    rf = RandomForestClassifier(random_state=42)
+    rf_best = perform_grid_search(rf, rf_param_grid, X_train, y_train)
+    
+    # Gradient Boosting
+    gb_param_grid = {
+        'n_estimators': [50, 100, 200],
+        'learning_rate': [0.01, 0.1, 0.2],
+        'max_depth': [3, 5, 7]
+    }
+    gb = GradientBoostingClassifier(random_state=42)
+    gb_best = perform_grid_search(gb, gb_param_grid, X_train, y_train)
+    
+    # knn
+    knn_param_grid = {
+        'n_neighbors': [3, 5, 10, 15],
+        'weights': ['uniform', 'distance'],
+        'p': [1, 2]
+    }
+    knn = KNeighborsClassifier()
+    knn_best = perform_grid_search(knn, knn_param_grid, X_train, y_train)
+    
+    # список базовых моделей
+    base_models = [
+        ('rf', rf_best),
+        ('gb', gb_best),
+        ('knn', knn_best)
+    ]
+    
+    # модель-мета
+    meta_model = LogisticRegression(random_state=42)
+    return base_models, meta_model
+
+def stacking(base_models, meta_model, X_train, y_train, X_test, n_folds=5):
+    """
+    стэкинг
+    """
+    train_meta = np.zeros((X_train.shape[0], len(base_models)))
+    test_meta = np.zeros((X_test.shape[0], len(base_models)))
+    test_meta_single = np.zeros((n_folds, X_test.shape[0], len(base_models)))
+    
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
+    
+    for i, (name, model) in enumerate(base_models):
+        print(f"обучение базовой модели: {name}")
+        for fold, (train_idx, val_idx) in enumerate(skf.split(X_train, y_train)):
+            X_fold_train, X_fold_val = X_train.iloc[train_idx], X_train.iloc[val_idx]
+            y_fold_train, y_fold_val = y_train[train_idx], y_train[val_idx]
+            model.fit(X_fold_train, y_fold_train)
+            train_meta[val_idx, i] = model.predict_proba(X_fold_val)[:, 1]
+            test_meta_single[fold, :, i] = model.predict_proba(X_test)[:, 1]
+        test_meta[:, i] = test_meta_single[:, :, i].mean(axis=0)
+    
+    print("обучение модели-мета...")
+    meta_model.fit(train_meta, y_train)
+    final_predictions = meta_model.predict(test_meta)
+    return final_predictions, base_models, meta_model
+
+def save_models(base_models, meta_model, label_encoder, save_path='./models'):
+    os.makedirs(save_path, exist_ok=True)
+    
+    for name, model in base_models:
+        with open(f"{save_path}/{name}_model.pkl", 'wb') as model_file:
+            pickle.dump(model, model_file)
+    
+    with open(f"{save_path}/meta_model.pkl", 'wb') as meta_file:
+        pickle.dump(meta_model, meta_file)
+    
+    with open(f"{save_path}/label_encoder.pkl", 'wb') as encoder_file:
+        pickle.dump(label_encoder, encoder_file)
+    print("модели сохранены")
+
+def evaluate_model(y_test, predictions):
+    accuracy = accuracy_score(y_test, predictions)
+    print(f"Точность стэкинг-модели: {accuracy * 100:.2f}%")
+
+def main(file_path):
+    features, labels = load_data(file_path)
+    X_train, X_test, y_train, y_test, label_encoder = preprocess_data(features, labels)
+    base_models, meta_model = define_models_with_tuning(X_train, y_train)
+    predictions, trained_base_models, trained_meta_model = stacking(base_models, meta_model, X_train, y_train, X_test)
+    evaluate_model(y_test, predictions)
+    save_models(trained_base_models, trained_meta_model, label_encoder)
+
+file_path = './anomalies.xlsx'
+main(file_path)
+
+'''
