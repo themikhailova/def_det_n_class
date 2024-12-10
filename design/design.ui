@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>873</width>
+    <height>571</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QHBoxLayout" name="horizontalLayout">
+    <item>
+     <widget class="QWidget" name="setting" native="true">
+      <layout class="QVBoxLayout" name="verticalLayout_3">
+       <item>
+        <widget class="QGraphicsView" name="defect"/>
+       </item>
+       <item>
+        <widget class="QPushButton" name="edit">
+         <property name="text">
+          <string>Изменить</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="cancel">
+         <property name="text">
+          <string>Отменить</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="save">
+         <property name="styleSheet">
+          <string notr="true">background-color: rgb(131, 255, 243);
+gridline-color: rgb(230, 98, 255);</string>
+         </property>
+         <property name="text">
+          <string>Сохранить</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QWidget" name="imagine" native="true">
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <item>
+        <widget class="QLabel" name="imagine_label">
+         <property name="text">
+          <string>Изображения</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QListView" name="directory"/>
+       </item>
+       <item>
+        <widget class="QPushButton" name="set_directory">
+         <property name="text">
+          <string>Указать директорию</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="analysis">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="text">
+          <string>Провести анализ</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="statistics">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="text">
+          <string>Выгрузить статистику</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QWidget" name="template_3" native="true">
+      <layout class="QVBoxLayout" name="verticalLayout">
+       <item>
+        <widget class="QLabel" name="template_label">
+         <property name="text">
+          <string>Шаблоны</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTableView" name="template_2"/>
+       </item>
+       <item>
+        <widget class="QPushButton" name="delete_template">
+         <property name="text">
+          <string>Удалить шаблон</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="insert_template">
+         <property name="text">
+          <string>Добавить шаблон</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>873</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menu">
+    <property name="title">
+     <string>Настройки</string>
+    </property>
+   </widget>
+   <widget class="QMenu" name="menu_2">
+    <property name="title">
+     <string>Справка</string>
+    </property>
+   </widget>
+   <widget class="QMenu" name="menu_3">
+    <property name="title">
+     <string>Выход</string>
+    </property>
+   </widget>
+   <addaction name="menu"/>
+   <addaction name="menu_2"/>
+   <addaction name="menu_3"/>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
