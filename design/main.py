@@ -1,5 +1,4 @@
 import sys
-import os
 from pathlib import Path
 import re
 import shutil
@@ -87,7 +86,7 @@ class MainApp(QtWidgets.QMainWindow):
         """Когда пользователь выбирает файл из списка"""
         if self.current_directory:
             file_name = self.ui.directory.model().data(index, QtCore.Qt.DisplayRole)
-            file_path = os.path.join(self.current_directory, file_name)
+            file_path = self.current_directory / file_name
             self.selected_file = self.current_directory / file_name
             print(f"Выбран файл: {file_path}")
 
