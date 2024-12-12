@@ -12,6 +12,23 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 
 class Ui_MainWindow(object):
+
+    def button_style(self, color):
+        """Стиль для кнопок"""
+        return f"""
+            QPushButton {{
+                background-color: {color};
+                color: white;
+                border: 2px solid #4C566A;
+                border-radius: 5px;
+                padding: 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #4C566A;
+                color: {color};
+            }}
+        """
+
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(873, 571)
@@ -32,7 +49,7 @@ class Ui_MainWindow(object):
         self.horizontalLayout = QtWidgets.QHBoxLayout(self.centralwidget)
         self.horizontalLayout.setObjectName("horizontalLayout")
 
-        # Секция "Настройки"
+        # Виджет "Настройки"
         self.setting = QtWidgets.QWidget(self.centralwidget)
         self.setting.setObjectName("setting")
         self.verticalLayout_3 = QtWidgets.QVBoxLayout(self.setting)
@@ -65,7 +82,7 @@ class Ui_MainWindow(object):
 
         self.horizontalLayout.addWidget(self.setting)
 
-        # Секция "Изображения"
+        # Виджет "Изображения"
         self.imagine = QtWidgets.QWidget(self.centralwidget)
         self.imagine.setObjectName("imagine")
         self.verticalLayout_2 = QtWidgets.QVBoxLayout(self.imagine)
@@ -155,7 +172,9 @@ class Ui_MainWindow(object):
 
         MainWindow.setCentralWidget(self.centralwidget)
         self.retranslateUi(MainWindow)
-        QtCore.QMetaObject.connectSlotsByName(MainWindow)
+
+        # Удалила автоподключение, т.к. из-за него у нас выводилось все по 3 раза
+        # QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
@@ -170,30 +189,3 @@ class Ui_MainWindow(object):
         self.template_label.setText(_translate("MainWindow", "Шаблоны"))
         self.delete_template.setText(_translate("MainWindow", "Удалить шаблон"))
         self.insert_template.setText(_translate("MainWindow", "Добавить шаблон"))
-
-    def button_style(self, color):
-        """Стиль для кнопок"""
-        return f"""
-            QPushButton {{
-                background-color: {color};
-                color: white;
-                border: 2px solid #4C566A;
-                border-radius: 5px;
-                padding: 10px;
-            }}
-            QPushButton:hover {{
-                background-color: #4C566A;
-                color: {color};
-            }}
-        """
-
-
-if __name__ == "__main__":
-    import sys
-
-    app = QtWidgets.QApplication(sys.argv)
-    MainWindow = QtWidgets.QMainWindow()
-    ui = Ui_MainWindow()
-    ui.setupUi(MainWindow)
-    MainWindow.show()
-    sys.exit(app.exec_())
