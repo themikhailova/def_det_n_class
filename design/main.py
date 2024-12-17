@@ -1,9 +1,12 @@
 import sys
-from pathlib import Path
 import re
 import shutil
+from pathlib import Path
 from PyQt5 import QtWidgets, QtCore
 from design import Ui_MainWindow  # Импорт интерфейса из файла new.py
+
+#Константа для регулярного выражения фильтрации изображений
+IMAGE_PATTERN = re.compile(r'.*\.(png|jpg|jpeg|gif|bmp)$', re.IGNORECASE)
 
 
 class MainApp(QtWidgets.QMainWindow):
@@ -13,14 +16,9 @@ class MainApp(QtWidgets.QMainWindow):
         self.ui = Ui_MainWindow()  # Инициализируем интерфейс
         self.ui.setupUi(self)  # Устанавливаем интерфейс в MainWindow
 
-        # Создаем модель
+        # Создаем модель для хранения списка файлов
         self.model = QtCore.QStringListModel()
         self.ui.directory.setModel(self.model)  # Назначаем модель виджету ListView
-
-        try:
-            self.ui.directory.clicked.disconnect()
-        except Exception:
-            pass
 
         # Подключение сигналов к кнопкам
         self.ui.edit.clicked.connect(self.on_edit_clicked)
@@ -34,25 +32,24 @@ class MainApp(QtWidgets.QMainWindow):
         # Подключаем событие клика по списку файлов
         self.ui.directory.clicked.connect(self.on_file_selected)
 
-        # Регулярное выражение для проверки типов файлов изображений
-        self.image_pattern = re.compile(r'.*\.(png|jpg|jpeg|gif|bmp)$', re.IGNORECASE)
-
         # Храним текущую директорию и выбранный файл
         self.current_directory = Path()
-        self.selected_file = Path()
+        self.selected_file = None  # Устанавливаем None, когда файл не выбран
 
-        # Подключение сигналов к кнопкам
+        # Подключение сигнала к кнопке сохранения
         self.ui.save.clicked.connect(self.on_save_clicked)
 
     def on_edit_clicked(self):
+        """Обработчик нажатия на кнопку 'Изменить'"""
         print("Кнопка 'Изменить' нажата")
 
     def on_cancel_clicked(self):
+        """Обработчик нажатия на кнопку 'Отменить'"""
         print("Кнопка 'Отменить' нажата")
 
     def on_save_clicked(self):
         """Сохранить выбранный файл в указанную директорию"""
-        if not self.selected_file:
+        if not self.selected_file or not self.selected_file.exists():
             QtWidgets.QMessageBox.warning(self, "Ошибка", "Сначала выберите файл для сохранения.")
             return
 
@@ -61,7 +58,7 @@ class MainApp(QtWidgets.QMainWindow):
             return  # Если пользователь закрыл диалог без выбора директории
 
         # Получаем имя файла из пути
-        file_name = self.selected_file.name  # Получаем имя файла с помощью Path
+        file_name = self.selected_file.name  # Получаем имя файла
         target_path = Path(target_directory) / file_name  # Конкатенация путей с помощью оператора /
 
         try:
@@ -79,33 +76,43 @@ class MainApp(QtWidgets.QMainWindow):
         directory = QtWidgets.QFileDialog.getExistingDirectory(self, "Указать директорию", "")
         if directory:
             self.current_directory = Path(directory)
-            print(f"Выбрана директория: {directory}")
-            self.load_files_from_directory(directory)
+            print(f"Выбрана директория: {self.current_directory}")
+            self.load_files_from_current_directory()
 
     def on_file_selected(self, index):
         """Когда пользователь выбирает файл из списка"""
         if self.current_directory:
             file_name = self.ui.directory.model().data(index, QtCore.Qt.DisplayRole)
-            file_path = self.current_directory / file_name
+            #Сохраняем полный путь к выбранному файлу
             self.selected_file = self.current_directory / file_name
-            print(f"Выбран файл: {file_path}")
+            print(f"Выбран файл: {self.selected_file}")
 
-    def load_files_from_directory(self, directory):
-        """Загрузить изображения из указанной директории в ListView"""
-        directory_path = Path(directory)  # Преобразуем путь в объект Path
-        files = [f.name for f in directory_path.iterdir() if f.is_file() and self.image_pattern.match(f.name)]
-        self.model.setStringList(files)  # Обновляем данные в уже существующей модели
+    def load_files_from_current_directory(self):
+        """Загрузить изображения из текущей директории self.current_directory в ListView"""
+        if not self.current_directory or not self.current_directory.exists():
+            print(f"Директория {self.current_directory} не найдена")
+            return  # Если директория не установлена или не существует
+
+        files = [file.name for file in self.current_directory.iterdir() if
+                 file.is_file() and IMAGE_PATTERN.match(file.name)]
+        print(f"Найдено файлов: {len(files)}")
+
+        self.model.setStringList(files)  # Обновляем модель
 
     def on_analysis_clicked(self):
+        """Обработчик нажатия на кнопку 'Провести анализ'"""
         print("Кнопка 'Провести анализ' нажата")
 
     def on_statistics_clicked(self):
+        """Обработчик нажатия на кнопку 'Выгрузить статистику'"""
         print("Кнопка 'Выгрузить статистику' нажата")
 
     def on_insert_template_clicked(self):
+        """Обработчик нажатия на кнопку 'Добавить шаблон'"""
         print("Кнопка 'Добавить шаблон' нажата")
 
     def on_delete_template_clicked(self):
+        """Обработчик нажатия на кнопку 'Удалить шаблон'"""
         print("Кнопка 'Удалить шаблон' нажата")
 
 
