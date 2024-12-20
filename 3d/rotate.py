@@ -30,11 +30,20 @@ def rot(angle_x, angle_y, angle_z, mesh):
     rotated_mesh = mesh.copy()
     rotated_mesh.apply_transform(combined_rotation_matrix)
     scene = trimesh.Scene(rotated_mesh)
+
+    bounding_box = rotated_mesh.bounding_box.extents
+    max_extent = max(bounding_box)  # Максимальное измерение модели
+        
+    # Устанавливаем расстояние камеры в зависимости от размеров модели
+    distance_mesh = max_extent * 3  # Увеличиваем расстояние для большего обзора
+
+
     scene.camera.resolution = (1024, 1024)
     scene.camera.fov = (90, 90)
 
     center_point = np.array(rotated_mesh.centroid)
-    scene.camera.look_at([center_point], distance=4)
+    # scene.camera.look_at([center_point], distance=distance_mesh)
+    scene.set_camera(center=center_point, distance=distance_mesh)
     # Рендеринг сцены
     image_data = scene.save_image(visible=True, background=[0, 0, 0, 255])
     image = Image.open(io.BytesIO(image_data)).convert("RGB")
@@ -52,7 +61,7 @@ def process_direction(args):
     
     image.save(file_name, "JPEG")
     model_image = cv2.imread(file_name, cv2.IMREAD_GRAYSCALE)
-    _,dif = difference(model_image, target_image)
+    dif,_ = difference(model_image, target_image)
 
     return angle, dif if dif is not None and dif < min_dif else min_dif
 
@@ -79,34 +88,73 @@ def render_and_save_image_parallel(mesh, target_image, min_dif):
 
     return best_angles, min_dif
 
-def camera_rot(x, y, z, mesh):
+def move_model(x, y, z, mesh):
     '''
-    Перемещает кмеру на заданные координаты
-    :param x, y, z: координаты по осям x, y, z соответственно
-    :param mesh: 3д-модель
-    :return: изображение модели, рассматриваемой с заданной точки
+    Перемещает модель в заданные координаты относительно сцены, фиксируя камеру.
+    :param x, y, z: координаты смещения модели
+    :param mesh: 3D-модель
+    :return: изображение модели с новой позиции
     '''
+    # Создаем сцену с моделью
     scene = trimesh.Scene(mesh)
-    scene.camera.resolution = (1024, 1024)
-    scene.camera.fov = (90, 90)
-    cam_rot = np.array([0, 0, 0])
-    center_point = np.array(mesh.centroid) + np.array([x, y, z]) 
-    print(center_point)
-    scene.set_camera(center=center_point, distance=6  )
 
+    # Устанавливаем камеру в позицию, аналогичную функции rot
+    bounding_box = mesh.bounding_box.extents
+    max_extent = max(bounding_box)  # Максимальное измерение модели
+        
+    # Устанавливаем расстояние камеры в зависимости от размеров модели
+    distance_mesh = max_extent * 3.5  # Увеличиваем расстояние для большего обзора
+    scene.camera.resolution = (1024, 1024)
+    scene.camera.fov = (90, 90)  # Угол обзора камеры
+    center_point = mesh.centroid  # Центр модели
+    scene.set_camera(center=center_point, distance=distance_mesh)
+
+    # Перемещаем модель
+    translation_matrix = trimesh.transformations.translation_matrix([x, y, z])
+    # moved_mesh = mesh.copy()
+    mesh.apply_transform(translation_matrix)
+
+    # Обновляем сцену с новой позицией модели
+    scene.add_geometry(mesh, transform=np.eye(4))
+
+    # Сохраняем изображение
     image_data = scene.save_image(visible=True, background=[0, 0, 0, 0])
     image = Image.open(io.BytesIO(image_data)).convert("RGB")
     return image
 
+# def camera_rot(x, y, z, mesh):
+#     '''
+#     Перемещает камеру на заданные координаты
+#     :param x, y, z: координаты по осям x, y, z соответственно
+#     :param mesh: 3д-модель
+#     :return: изображение модели, рассматриваемой с заданной точки
+#     '''
+#     scene = trimesh.Scene(mesh)
+#     scene.camera.resolution = (1024, 1024)
+#     scene.camera.fov = (90, 90)
+#     bounding_box = mesh.bounding_box.extents
+#     max_extent = max(bounding_box)  # Максимальное измерение модели
+        
+#     # Устанавливаем расстояние камеры в зависимости от размеров модели
+#     distance_mesh = max_extent * 8  # Увеличиваем расстояние для большего обзора
+#     print(distance_mesh)
+#     center_point = np.array(mesh.centroid) + np.array([x, y, z]) 
+#     print(center_point)
+#     scene.set_camera(center=center_point, distance=distance_mesh)
+
+#     image_data = scene.save_image(visible=True, background=[0, 0, 0, 0])
+#     image = Image.open(io.BytesIO(image_data)).convert("RGB")
+#     return image
+
 def process_camera_rotation(args):
     angle, file_name, mesh, target_image, min_dif = args
     angle_x, angle_y, angle_z = angle
-    image = camera_rot(angle_x, angle_y, angle_z, mesh)
+    image = move_model(angle_x, angle_y, angle_z, mesh)
     if image is None:
         return None, min_dif
     image.save(file_name, "JPEG")
     model_image = cv2.imread(file_name, cv2.IMREAD_GRAYSCALE)
-    _,dif = difference(model_image, target_image)
+    dif,_ = difference(model_image, target_image)
     return angle, dif if dif is not None and dif < min_dif else None
 
 def render_images_camera_rotation(mesh, target_image, min_dif):
@@ -145,8 +193,8 @@ def cut_directions():
 
 if __name__ == '__main__':
     
-    input_img = r'D:\Downloads\54.jpg'
-    input_obj_file = r'D:\Downloads\mod23543.obj'
+    input_img = r'./try54.jpg'
+    input_obj_file = r'./mod23543.obj'
 
     mesh_or = trimesh.load(input_obj_file)
     min_dif = float('inf')
