@@ -189,3 +189,103 @@ class Ui_MainWindow(object):
         self.template_label.setText(_translate("MainWindow", "Шаблоны"))
         self.delete_template.setText(_translate("MainWindow", "Удалить шаблон"))
         self.insert_template.setText(_translate("MainWindow", "Добавить шаблон"))
+
+class Ui_AddTemplateDialog(object):
+    """Интерфейс диалогового окна для добавления шаблона"""
+    def setupUi(self, Dialog):
+        Dialog.setObjectName("AddTemplateDialog")
+        Dialog.resize(500, 400)
+
+        # Применяем стиль для диалогового окна
+        Dialog.setStyleSheet("""
+            QDialog {
+                background-color: #2E3440;
+                color: #ECEFF4;
+                font-family: 'Arial';
+                font-size: 14px;
+            }
+            QLabel {
+                color: #D8DEE9;
+            }
+            QLineEdit, QTableWidget {
+                background-color: #3B4252;
+                color: #ECEFF4;
+                border: 1px solid #88C0D0;
+                padding: 5px;
+                font-size: 14px;
+            }
+            QPushButton {
+                background-color: #88C0D0;
+                color: white;
+                border: 2px solid #4C566A;
+                border-radius: 5px;
+                padding: 10px;
+            }
+            QPushButton:hover {
+                background-color: #4C566A;
+                color: #88C0D0;
+            }
+        """)
+
+        # Основной макет
+        self.verticalLayout = QtWidgets.QVBoxLayout(Dialog)
+        self.verticalLayout.setObjectName("verticalLayout")
+
+        # Таблица для ввода данных
+        self.table = QtWidgets.QTableWidget(Dialog)
+        self.table.setObjectName("table")
+        self.table.setColumnCount(2)
+        self.table.setRowCount(1)
+        self.table.setHorizontalHeaderLabels(["Наименование", "Код изделия"])
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.verticalLayout.addWidget(self.table)
+
+        # Поле для выбора директории
+        self.directoryLayout = QtWidgets.QHBoxLayout()
+        self.directoryLabel = QtWidgets.QLabel(Dialog)
+        self.directoryLabel.setText("Директория эталонов:")
+        self.directoryLabel.setObjectName("directoryLabel")
+        self.directoryLayout.addWidget(self.directoryLabel)
+
+        self.directoryInput = QtWidgets.QLineEdit(Dialog)
+        self.directoryInput.setObjectName("directoryInput")
+        self.directoryLayout.addWidget(self.directoryInput)
+
+        self.browseButton = QtWidgets.QPushButton(Dialog)
+        self.browseButton.setText("Обзор")
+        self.browseButton.setObjectName("browseButton")
+        self.directoryLayout.addWidget(self.browseButton)
+
+        self.verticalLayout.addLayout(self.directoryLayout)
+
+        # Предпросмотр изображения
+        self.preview_label = QtWidgets.QLabel(Dialog)
+        self.preview_label.setObjectName("preview_label")
+        self.preview_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.preview_label.setStyleSheet("""
+            QLabel {
+                background-color: #3B4252;
+                border: 1px solid #88C0D0;
+                padding: 10px;
+                min-height: 150px;
+            }
+        """)
+        self.preview_label.setText("Предпросмотр")
+        self.verticalLayout.addWidget(self.preview_label)
+
+        # Кнопки сохранить/отмена
+        self.buttonLayout = QtWidgets.QHBoxLayout()
+        self.save_button = QtWidgets.QPushButton(Dialog)
+        self.save_button.setObjectName("save_button")
+        self.save_button.setText("Сохранить")
+        self.buttonLayout.addWidget(self.save_button)
+
+        self.cancel_button = QtWidgets.QPushButton(Dialog)
+        self.cancel_button.setObjectName("cancel_button")
+        self.cancel_button.setText("Отмена")
+        self.buttonLayout.addWidget(self.cancel_button)
+
+        self.verticalLayout.addLayout(self.buttonLayout)
+    def retranslateUi(self, Dialog):
+            _translate = QtCore.QCoreApplication.translate
+            Dialog.setWindowTitle(_translate("Dialog", "Добавить шаблон"))
