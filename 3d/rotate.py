@@ -9,44 +9,73 @@ from compare import difference
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 import trimesh
+import trimesh
+import numpy as np
+import pyrender
+from PIL import Image, ImageOps
 
 
-def rot(angle_x, angle_y, angle_z, mesh):
+def rot(angle_x, angle_y, angle_z, mesh, invert_colors=True):
     '''
-    Поворачиват модель на заданный угол
-    :param angle_x, angle_y, angle_z: углы по осям x, y, z соответственно
-    :param mesh: 3д-модель
+    Поворачивает модель на заданный угол с использованием pyrender.
+    :param angle_x: угол поворота по оси X в градусах
+    :param angle_y: угол поворота по оси Y в градусах
+    :param angle_z: угол поворота по оси Z в градусах
+    :param mesh: 3D-модель (объект trimesh)
+    :param invert_colors: флаг для инверсии цветов изображения (по умолчанию False)
     :return: изображение модели, повернутой на заданный угол
     '''
     angle_x_rad = np.radians(angle_x)
     angle_y_rad = np.radians(angle_y)
     angle_z_rad = np.radians(angle_z)
-    # матрицы поворота
+
+    # Матрицы поворота
     rotation_matrix_x = trimesh.transformations.rotation_matrix(angle_x_rad, [1, 0, 0], mesh.centroid)
     rotation_matrix_y = trimesh.transformations.rotation_matrix(angle_y_rad, [0, 1, 0], mesh.centroid)
     rotation_matrix_z = trimesh.transformations.rotation_matrix(angle_z_rad, [0, 0, 1], mesh.centroid)
 
+    # Комбинированная матрица поворота
     combined_rotation_matrix = np.dot(np.dot(rotation_matrix_x, rotation_matrix_y), rotation_matrix_z)
+
+    # Применяем поворот к копии модели
     rotated_mesh = mesh.copy()
     rotated_mesh.apply_transform(combined_rotation_matrix)
-    scene = trimesh.Scene(rotated_mesh)
 
-    bounding_box = rotated_mesh.bounding_box.extents
-    max_extent = max(bounding_box)  # Максимальное измерение модели
-        
-    # Устанавливаем расстояние камеры в зависимости от размеров модели
-    distance_mesh = max_extent * 3  # Увеличиваем расстояние для большего обзора
+    # --- Создание сцены с pyrender ---
+    scene = pyrender.Scene()
 
+    # Преобразование модели для использования с pyrender
+    trimesh_mesh = pyrender.Mesh.from_trimesh(rotated_mesh, smooth=True)
+    scene.add(trimesh_mesh)
 
-    scene.camera.resolution = (1024, 1024)
-    scene.camera.fov = (90, 90)
+    # Настройка источника света
+    light = pyrender.PointLight(color=np.ones(3), intensity=5.0)  # Настраиваем интенсивность света
+    light_pose = np.eye(4)  # Положение источника света (по умолчанию в центре)
+    scene.add(light, pose=light_pose)
 
-    center_point = np.array(rotated_mesh.centroid)
-    # scene.camera.look_at([center_point], distance=distance_mesh)
-    scene.set_camera(center=center_point, distance=distance_mesh)
-    # Рендеринг сцены
-    image_data = scene.save_image(visible=True, background=[0, 0, 0, 255])
-    image = Image.open(io.BytesIO(image_data)).convert("RGB")
+    # Настройка камеры
+    camera = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
+    camera_pose = np.array([
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 2.5],
+        [0.0, 0.0, 0.0, 1.0],
+    ])
+    scene.add(camera, pose=camera_pose)
+
+    # --- Рендеринг сцены ---
+    r = pyrender.OffscreenRenderer(1024, 768)  # Создаём рендерер для захвата изображения
+    color, _ = r.render(scene)  # Рендерим сцену в изображение
+
+    # Преобразование результата в изображение
+    image = Image.fromarray(color)
+
+    # Инверсия цветов, если флаг установлен
+    if invert_colors:
+        image = ImageOps.invert(image)
+
+    # Очищаем рендерер
+    r.delete()
 
     return image
 
@@ -88,63 +117,68 @@ def render_and_save_image_parallel(mesh, target_image, min_dif):
 
     return best_angles, min_dif
 
-def move_model(x, y, z, mesh):
+def move_model(x, y, z, mesh, invert_colors=True):
     '''
-    Перемещает модель в заданные координаты относительно сцены, фиксируя камеру.
+    Перемещает модель в заданные координаты относительно сцены, фиксируя камеру и настраивая освещение как в функции rot.
     :param x, y, z: координаты смещения модели
     :param mesh: 3D-модель
     :return: изображение модели с новой позиции
     '''
-    # Создаем сцену с моделью
-    scene = trimesh.Scene(mesh)
-
-    # Устанавливаем камеру в позицию, аналогичную функции rot
-    bounding_box = mesh.bounding_box.extents
-    max_extent = max(bounding_box)  # Максимальное измерение модели
-        
-    # Устанавливаем расстояние камеры в зависимости от размеров модели
-    distance_mesh = max_extent * 3.5  # Увеличиваем расстояние для большего обзора
-    scene.camera.resolution = (1024, 1024)
-    scene.camera.fov = (90, 90)  # Угол обзора камеры
-    center_point = mesh.centroid  # Центр модели
-    scene.set_camera(center=center_point, distance=distance_mesh)
-
     # Перемещаем модель
     translation_matrix = trimesh.transformations.translation_matrix([x, y, z])
-    # moved_mesh = mesh.copy()
-    mesh.apply_transform(translation_matrix)
+    moved_mesh = mesh.copy()
+    moved_mesh.apply_transform(translation_matrix)
 
-    # Обновляем сцену с новой позицией модели
-    scene.add_geometry(mesh, transform=np.eye(4))
+    # --- Создание сцены с pyrender ---
+    scene = pyrender.Scene()
 
-    # Сохраняем изображение
-    image_data = scene.save_image(visible=True, background=[0, 0, 0, 0])
-    image = Image.open(io.BytesIO(image_data)).convert("RGB")
+    # Преобразование модели для использования с pyrender
+    pyrender_mesh = pyrender.Mesh.from_trimesh(moved_mesh, smooth=True)
+    scene.add(pyrender_mesh)
+    if x == 0 and y == 0:
+        light = pyrender.PointLight(color=np.ones(3), intensity=5.0)
+    else:
+        # --- Настройка освещения (как в rot) ---
+        light = pyrender.PointLight(color=np.ones(3), intensity=500.0)  # Интенсивность света
+    light_pose = np.eye(4)  # Свет в фиксированной позиции (в центре сцены)
+    scene.add(light, pose=light_pose)
+
+    # --- Настройка камеры ---
+    bounding_box = moved_mesh.bounding_box.extents
+    max_extent = max(bounding_box)  # Максимальное измерение модели
+    distance_mesh = max_extent * 5  # Увеличиваем расстояние для большего обзора
+
+    # Камера с фиксированным углом обзора
+    camera = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
+
+    if x == 0 and y == 0:
+        camera_pose = np.array([
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 2.5],
+                [0.0, 0.0, 0.0, 1.0],
+            ])
+    else:
+        camera_pose = np.array([
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, distance_mesh],
+            [0.0, 0.0, 0.0, 1.0],
+        ])
+    scene.add(camera, pose=camera_pose)
+
+    # --- Рендеринг сцены ---
+    r = pyrender.OffscreenRenderer(1024, 1024)  # Создаем рендерер для захвата изображения
+    color, _ = r.render(scene)  # Рендерим сцену в изображение
+
+    # Преобразование результата в изображение
+    image = Image.fromarray(color)
+    if invert_colors:
+        image = ImageOps.invert(image)
+    # Очищаем рендерер
+    r.delete()
+
     return image
-
-# def camera_rot(x, y, z, mesh):
-#     '''
-#     Перемещает камеру на заданные координаты
-#     :param x, y, z: координаты по осям x, y, z соответственно
-#     :param mesh: 3д-модель
-#     :return: изображение модели, рассматриваемой с заданной точки
-#     '''
-#     scene = trimesh.Scene(mesh)
-#     scene.camera.resolution = (1024, 1024)
-#     scene.camera.fov = (90, 90)
-#     bounding_box = mesh.bounding_box.extents
-#     max_extent = max(bounding_box)  # Максимальное измерение модели
-        
-#     # Устанавливаем расстояние камеры в зависимости от размеров модели
-#     distance_mesh = max_extent * 8  # Увеличиваем расстояние для большего обзора
-#     print(distance_mesh)
-#     center_point = np.array(mesh.centroid) + np.array([x, y, z]) 
-#     print(center_point)
-#     scene.set_camera(center=center_point, distance=distance_mesh)
-
-#     image_data = scene.save_image(visible=True, background=[0, 0, 0, 0])
-#     image = Image.open(io.BytesIO(image_data)).convert("RGB")
-#     return image
 
 def process_camera_rotation(args):
     angle, file_name, mesh, target_image, min_dif = args
@@ -193,8 +227,8 @@ def cut_directions():
 
 if __name__ == '__main__':
     
-    input_img = r'./try54.jpg'
-    input_obj_file = r'./mod23543.obj'
+    input_img = r'./try11noBack.jpg'
+    input_obj_file = r'./od1.obj'
 
     mesh_or = trimesh.load(input_obj_file)
     min_dif = float('inf')
