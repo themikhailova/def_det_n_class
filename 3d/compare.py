@@ -10,7 +10,7 @@ def crop_to_contour(image, contour):
     x, y, contour_width, contour_height = cv2.boundingRect(contour)
     cropped_image = image[y:y+contour_height, x:x+contour_width]
     return cropped_image
-def mask_creation(img, threshold=30):
+def mask_creation(img, threshold=0):
     _, binary = cv2.threshold(img, threshold, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if contours:
