@@ -10,6 +10,71 @@ from PyQt5.QtCore import QAbstractTableModel, Qt
 # Константа для регулярного выражения фильтрации изображений
 IMAGE_PATTERN = re.compile(r'.*\.(png|jpg|jpeg|gif|bmp)$', re.IGNORECASE)
 
+class EditTemplateDialog(QtWidgets.QDialog):
+    """Диалоговое окно для редактирования шаблона"""
+    def __init__(self, template_data):
+        super().__init__()
+        self.ui = Ui_AddTemplateDialog()
+        self.ui.setupUi(self)
+
+        # Предзаполняем поля данными шаблона
+        self.ui.table.setItem(0, 0, QtWidgets.QTableWidgetItem(template_data["Наименование"]))
+        self.ui.table.setItem(0, 1, QtWidgets.QTableWidgetItem(template_data["Код изделия"]))
+        self.ui.directoryInput.setText(template_data["Директория эталонов"])
+
+        # Подключение кнопок
+        self.ui.cancel_button.clicked.connect(self.reject)
+        self.ui.save_button.clicked.connect(self.accept)
+        self.ui.browseButton.clicked.connect(self.select_directory)
+
+        # Инициализируем путь к изображению
+        self.image_file = None
+        if template_data["Директория эталонов"]:
+            self.update_preview(template_data["Директория эталонов"])
+
+    def select_directory(self):
+        """Открыть диалог выбора директории и обновить предпросмотр"""
+        directory = QtWidgets.QFileDialog.getExistingDirectory(self, "Выберите директорию")
+        if directory:
+            self.ui.directoryInput.setText(directory)
+            self.update_preview(directory)
+
+    def update_preview(self, directory):
+        """Обновить предпросмотр изображения"""
+        directory_path = Path(directory)
+        image_files = [file for file in directory_path.iterdir() if file.suffix.lower() in ['.png', '.jpg', '.jpeg']]
+        if image_files:
+            # Сохраняем путь к первому изображению для адаптивного отображения
+            self.image_file = image_files[0]
+            self.render_preview()
+        else:
+            self.image_file = None
+            self.ui.preview_label.setText("Нет доступных изображений")
+
+    def render_preview(self):
+        """Отобразить изображение адаптивно в зависимости от размеров метки"""
+        if self.image_file:
+            pixmap = QtGui.QPixmap(str(self.image_file))
+            # Масштабируем изображение к размеру QLabel
+            scaled_pixmap = pixmap.scaled(
+                self.ui.preview_label.width(),
+                self.ui.preview_label.height(),
+                QtCore.Qt.KeepAspectRatio,
+                QtCore.Qt.SmoothTransformation
+            )
+            self.ui.preview_label.setPixmap(scaled_pixmap)
+
+    def resizeEvent(self, event):
+        """Перехват события изменения размера окна"""
+        super().resizeEvent(event)
+        self.render_preview()
+
+    def get_template_data(self):
+        """Возвращает обновленные данные из таблицы и директории"""
+        name = self.ui.table.item(0, 0).text() if self.ui.table.item(0, 0) else ""
+        code = self.ui.table.item(0, 1).text() if self.ui.table.item(0, 1) else ""
+        directory = self.ui.directoryInput.text()
+        return {"Наименование": name, "Код изделия": code, "Директория эталонов": directory}
 
 class PandasModel(QAbstractTableModel):
     """Модель для отображения DataFrame в QTableView с чекбоксами"""
@@ -132,6 +197,8 @@ class MainApp(QtWidgets.QMainWindow):
         super().__init__()
         self.ui = Ui_MainWindow()  # Инициализируем интерфейс
         self.ui.setupUi(self)  # Устанавливаем интерфейс в MainWindow
+
+        self.ui.template_2.doubleClicked.connect(self.on_template_double_clicked)
 
         # Определим путь к файлу шаблонов в папке проекта
         project_dir = Path(__file__).parent  # Текущая директория проекта
@@ -284,6 +351,28 @@ class MainApp(QtWidgets.QMainWindow):
             self.template_df.to_excel(self.template_file_path, index=False, engine="openpyxl")
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить шаблоны: {e}")
+
+    def on_template_double_clicked(self, index):
+        """Открывает диалоговое окно для редактирования шаблона при двойном клике"""
+        if index.row() < 0:
+            return  # Если индекс невалидный
+
+        # Получаем данные выбранного шаблона
+        selected_template = self.template_df.iloc[index.row()].to_dict()
+
+        # Открываем диалоговое окно редактирования
+        dialog = EditTemplateDialog(selected_template)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            # Получаем обновленные данные из диалога
+            updated_data = dialog.get_template_data()
+
+            # Обновляем данные в DataFrame
+            for key, value in updated_data.items():
+                self.template_df.at[index.row(), key] = value
+
+            # Сохраняем изменения и обновляем отображение
+            self.save_template_file()
+            self.refresh_template_view()
 
 
 if __name__ == '__main__':
