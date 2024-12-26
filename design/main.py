@@ -3,11 +3,69 @@ import re
 import pandas as pd
 import shutil
 from pathlib import Path
-from PyQt5 import QtWidgets, QtCore, QtGui  # Добавлен QtGui
+from PyQt5 import QtWidgets, QtCore, QtGui
 from design import Ui_MainWindow, Ui_AddTemplateDialog
+from PyQt5.QtCore import QAbstractTableModel, Qt
 
-#Константа для регулярного выражения фильтрации изображений
+# Константа для регулярного выражения фильтрации изображений
 IMAGE_PATTERN = re.compile(r'.*\.(png|jpg|jpeg|gif|bmp)$', re.IGNORECASE)
+
+
+class PandasModel(QAbstractTableModel):
+    """Модель для отображения DataFrame в QTableView с чекбоксами"""
+    def __init__(self, data):
+        super().__init__()
+        self._data = data
+        self.checked_row = -1  # Индекс выбранного чекбокса (один выбранный шаблон)
+
+    def rowCount(self, parent=None):
+        return self._data.shape[0]
+
+    def columnCount(self, parent=None):
+        return self._data.shape[1] + 1  # Добавление колонки для чекбоксов
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+
+        # Колонка чекбоксов
+        if index.column() == 0:
+            if role == Qt.CheckStateRole:
+                return Qt.Checked if index.row() == self.checked_row else Qt.Unchecked
+            return None
+
+        # Остальные данные
+        if role == Qt.DisplayRole:
+            return str(self._data.iloc[index.row(), index.column() - 1])
+        return None
+
+    def setData(self, index, value, role=Qt.EditRole):
+        if index.column() == 0 and role == Qt.CheckStateRole:
+            self.checked_row = index.row()  # Обновляем индекс выбранного шаблона
+            self.layoutChanged.emit()  # Обновляем отображение
+            return True
+        return False
+
+    def flags(self, index):
+        if index.column() == 0:
+            return Qt.ItemIsEnabled | Qt.ItemIsUserCheckable
+        return Qt.ItemIsEnabled
+
+    def headerData(self, section, orientation, role=Qt.DisplayRole):
+        if role == Qt.DisplayRole:
+            if orientation == Qt.Horizontal:
+                if section == 0:
+                    return "Выбор"
+                return self._data.columns[section - 1]
+            if orientation == Qt.Vertical:
+                return str(section + 1)
+        return None
+
+    def get_selected_template(self):
+        """Получает данные выбранного шаблона"""
+        if not hasattr(self, 'table_model') or self.table_model.checked_row == -1:
+            return None
+        return self.template_df.iloc[self.table_model.checked_row].to_dict()
 
 class AddTemplateDialog(QtWidgets.QDialog):
     """Диалоговое окно для добавления шаблона"""
@@ -68,20 +126,23 @@ class AddTemplateDialog(QtWidgets.QDialog):
         directory = self.ui.directoryInput.text()
         return {"name": name, "code": code, "directory": directory}
 
+
 class MainApp(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.ui = Ui_MainWindow()  # Инициализируем интерфейс
         self.ui.setupUi(self)  # Устанавливаем интерфейс в MainWindow
 
-        # Подключение сигналов к кнопкам
-        self.ui.insert_template.clicked.connect(self.on_insert_template_clicked)
-
-        # Путь к файлу шаблонов
-        self.template_file_path = "/Users/valeriashchepilova/Desktop/шаблоны.xlsx"
+        # Определим путь к файлу шаблонов в папке проекта
+        project_dir = Path(__file__).parent  # Текущая директория проекта
+        self.template_file_path = project_dir / "шаблоны.xlsx"
 
         # Загрузим существующую таблицу
         self.template_df = self.load_template_file()
+
+        # Подключение модели к QTableView
+        self.table_model = PandasModel(self.template_df)
+        self.ui.template_2.setModel(self.table_model)
 
         # Создаем модель для хранения списка файлов
         self.model = QtCore.QStringListModel()
@@ -107,75 +168,54 @@ class MainApp(QtWidgets.QMainWindow):
         self.ui.save.clicked.connect(self.on_save_clicked)
 
     def on_edit_clicked(self):
-        """Обработчик нажатия на кнопку 'Изменить'"""
         print("Кнопка 'Изменить' нажата")
 
     def on_cancel_clicked(self):
-        """Обработчик нажатия на кнопку 'Отменить'"""
         print("Кнопка 'Отменить' нажата")
 
     def on_save_clicked(self):
-        """Сохранить выбранный файл в указанную директорию"""
         if not self.selected_file or not self.selected_file.exists():
             QtWidgets.QMessageBox.warning(self, "Ошибка", "Сначала выберите файл для сохранения.")
             return
-
         target_directory = QtWidgets.QFileDialog.getExistingDirectory(self, "Выберите директорию для сохранения файла")
         if not target_directory:
-            return  # Если пользователь закрыл диалог без выбора директории
-
-        # Получаем имя файла из пути
-        file_name = self.selected_file.name  # Получаем имя файла
-        target_path = Path(target_directory) / file_name  # Конкатенация путей с помощью оператора /
-
+            return
+        file_name = self.selected_file.name
+        target_path = Path(target_directory) / file_name
         try:
-            # Выполняем копирование файла
             shutil.copy(self.selected_file, target_path)
         except Exception as exc:
-            # Выводим сообщение об ошибке
             QtWidgets.QMessageBox.critical(self, "Ошибка", f"Ошибка при копировании файла: {str(exc)}")
         else:
-            # Выводим сообщение об успешном завершении копирования
             QtWidgets.QMessageBox.information(self, "Успех", f"Файл успешно скопирован в: {target_path}")
 
     def on_set_directory_clicked(self):
-        """Установить директорию для отображения изображений"""
         directory = QtWidgets.QFileDialog.getExistingDirectory(self, "Указать директорию", "")
         if directory:
             self.current_directory = Path(directory)
-            print(f"Выбрана директория: {self.current_directory}")
             self.load_files_from_current_directory()
 
     def on_file_selected(self, index):
-        """Когда пользователь выбирает файл из списка"""
         if self.current_directory:
             file_name = self.ui.directory.model().data(index, QtCore.Qt.DisplayRole)
-            #Сохраняем полный путь к выбранному файлу
             self.selected_file = self.current_directory / file_name
-            print(f"Выбран файл: {self.selected_file}")
 
     def load_files_from_current_directory(self):
-        """Загрузить изображения из текущей директории self.current_directory в ListView"""
         if not self.current_directory or not self.current_directory.exists():
-            print(f"Директория {self.current_directory} не найдена")
-            return  # Если директория не установлена или не существует
-
+            return
         files = [file.name for file in self.current_directory.iterdir() if
                  file.is_file() and IMAGE_PATTERN.match(file.name)]
-        print(f"Найдено файлов: {len(files)}")
-
-        self.model.setStringList(files)  # Обновляем модель
+        self.model.setStringList(files)
 
     def on_analysis_clicked(self):
-        """Обработчик нажатия на кнопку 'Провести анализ'"""
         print("Кнопка 'Провести анализ' нажата")
 
     def on_statistics_clicked(self):
         """Обработчик нажатия на кнопку 'Выгрузить статистику'"""
-        print("Кнопка 'Выгрузить статистику' нажата")
-
+        selected_template = self.get_selected_template()
+        if selected_template:
+            print(f"Выбран шаблон: {selected_template}")
     def on_insert_template_clicked(self):
-        """Обработчик нажатия на кнопку 'Добавить шаблон'"""
         dialog = AddTemplateDialog()
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
             template_data = dialog.get_template_data()
@@ -183,50 +223,68 @@ class MainApp(QtWidgets.QMainWindow):
 
     def on_delete_template_clicked(self):
         """Обработчик нажатия на кнопку 'Удалить шаблон'"""
-        print("Кнопка 'Удалить шаблон' нажата")
+        selected_template = self.get_selected_template()
+        if not selected_template:
+            QtWidgets.QMessageBox.warning(self, "Ошибка", "Выберите шаблон для удаления.")
+            return
 
-    def load_template_file(self):
-        """Загружает таблицу шаблонов или создает новую, если файл не найден"""
-        try:
-            return pd.read_excel(self.template_file_path)
-        except FileNotFoundError:
-            # Создаем пустую таблицу, если файл отсутствует
-            return pd.DataFrame(columns=["Наименование", "Код изделия", "Директория эталонов"])
+        # Подтверждение удаления
+        confirm = QtWidgets.QMessageBox.question(
+            self, "Удаление шаблона",
+            f"Вы уверены, что хотите удалить шаблон:\n\nНаименование: {selected_template['Наименование']}\nКод изделия: {selected_template['Код изделия']}",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+        )
+        if confirm != QtWidgets.QMessageBox.Yes:
+            return
 
-    def save_template_file(self):
-        """Сохраняет таблицу шаблонов в файл"""
-        try:
-            self.template_df.to_excel(self.template_file_path, index=False)
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить шаблоны: {e}")
+        # Удаляем выбранный шаблон
+        self.template_df = self.template_df.drop(self.table_model.checked_row).reset_index(drop=True)
+        self.save_template_file()
+        self.refresh_template_view()
+        QtWidgets.QMessageBox.information(self, "Успех", "Шаблон успешно удален.")
+
+    def get_selected_template(self):
+        """Получает данные выбранного шаблона"""
+        if not hasattr(self, 'table_model') or self.table_model.checked_row == -1:
+            return None
+        return self.template_df.iloc[self.table_model.checked_row].to_dict()
+
+    def refresh_template_view(self):
+        """Обновляет данные в QTableView"""
+        self.table_model = PandasModel(self.template_df)
+        self.ui.template_2.setModel(self.table_model)
 
     def add_template_to_table(self, template_data):
-        """Добавляет новый шаблон в таблицу и сохраняет файл"""
         required_columns = ["Наименование", "Код изделия", "Директория эталонов"]
-
-        # Проверяем, что все поля присутствуют и не являются пустыми
         for col, key in zip(required_columns, ["name", "code", "directory"]):
             if not template_data.get(key) or not str(template_data.get(key)).strip():
                 QtWidgets.QMessageBox.warning(self, "Ошибка", f"Поле '{col}' должно быть заполнено.")
                 return
-
-        # Формируем новый DataFrame с учетом порядка столбцов
         new_row = pd.DataFrame([{
             "Наименование": template_data["name"],
             "Код изделия": template_data["code"],
             "Директория эталонов": template_data["directory"]
         }])
-
-        # Добавляем новый шаблон в таблицу
         self.template_df = pd.concat([self.template_df, new_row], ignore_index=True)
-
-        # Приводим таблицу к требуемой структуре
         self.template_df = self.template_df[required_columns]
-
-        # Сохраняем таблицу
         self.save_template_file()
+        self.refresh_template_view()
 
-        QtWidgets.QMessageBox.information(self, "Успех", "Шаблон успешно добавлен и сохранен.")
+    def load_template_file(self):
+        if not self.template_file_path.exists():
+            return pd.DataFrame(columns=["Наименование", "Код изделия", "Директория эталонов"])
+        try:
+            return pd.read_excel(self.template_file_path)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить файл шаблонов: {e}")
+            return pd.DataFrame(columns=["Наименование", "Код изделия", "Директория эталонов"])
+
+    def save_template_file(self):
+        try:
+            self.template_df.to_excel(self.template_file_path, index=False, engine="openpyxl")
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить шаблоны: {e}")
+
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
