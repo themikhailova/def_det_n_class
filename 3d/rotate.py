@@ -1,16 +1,11 @@
 import trimesh
 import numpy as np
-from PIL import Image
 import io
 import copy
 import time
 import cv2
 from compare import difference
 from concurrent.futures import ProcessPoolExecutor
-import numpy as np
-import trimesh
-import trimesh
-import numpy as np
 import pyrender
 from PIL import Image, ImageOps
 
@@ -49,18 +44,21 @@ def rot(angle_x, angle_y, angle_z, mesh, invert_colors=True):
     scene.add(trimesh_mesh)
 
     # Настройка источника света
-    light = pyrender.PointLight(color=np.ones(3), intensity=5.0)  # Настраиваем интенсивность света
+    light = pyrender.PointLight(color=np.ones(3), intensity=50.0)  # Настраиваем интенсивность света
     light_pose = np.eye(4)  # Положение источника света (по умолчанию в центре)
     scene.add(light, pose=light_pose)
 
-    # Настройка камеры
-    camera = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
+    max_extent, center, distance_mesh = calculate_model_scale_and_camera_distance(rotated_mesh)
+    # print((3*max_extent)/2, distance_mesh)
+    # Камера с фиксированным углом обзора
+    camera = pyrender.PerspectiveCamera(yfov=np.pi / 2.0)
+
     camera_pose = np.array([
-        [1.0, 0.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 2.5],
-        [0.0, 0.0, 0.0, 1.0],
-    ])
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 2.5],
+                [0.0, 0.0, 0.0, 1.0],
+            ])
     scene.add(camera, pose=camera_pose)
 
     # --- Рендеринг сцены ---
@@ -111,6 +109,7 @@ def render_and_save_image_parallel(mesh, target_image, min_dif):
             [(angle, file_name, mesh, target_image, min_dif) for angle, file_name in directions]
         )
         for angle, dif in results:
+            print(angle, dif)
             if dif < min_dif:
                 min_dif = dif
                 best_angles = angle
@@ -160,11 +159,6 @@ def move_model(x, y, z, mesh, invert_colors=True):
     light_pose = np.eye(4)  # Свет в фиксированной позиции (в центре сцены)
     scene.add(light, pose=light_pose)
 
-    # --- Настройка камеры ---
-    # bounding_box = moved_mesh.bounding_box.extents
-    # max_extent = max(bounding_box)  # Максимальное измерение модели
-    # distance_mesh = max_extent * 5  # Увеличиваем расстояние для большего обзора
-    # print(distance_mesh)
     # Рассчитываем масштаб и расстояние камеры
     max_extent, center, distance_mesh = calculate_model_scale_and_camera_distance(moved_mesh)
     # print((3*max_extent)/2, distance_mesh)
@@ -177,20 +171,7 @@ def move_model(x, y, z, mesh, invert_colors=True):
                 [0.0, 0.0, 1.0, (3*max_extent+0.4)/2],
                 [0.0, 0.0, 0.0, 1.0],
             ])
-    # if x == 0 and y == 0:
-    #     camera_pose = np.array([
-    #             [1.0, 0.0, 0.0, 0.0],
-    #             [0.0, 1.0, 0.0, 0.0],
-    #             [0.0, 0.0, 1.0, 2.5],
-    #             [0.0, 0.0, 0.0, 1.0],
-    #         ])
-    # else:
-    #     camera_pose = np.array([
-    #         [1.0, 0.0, 0.0, 0.0],
-    #         [0.0, 1.0, 0.0, 0.0],
-    #         [0.0, 0.0, 1.0, 2.5],
-    #         [0.0, 0.0, 0.0, 1.0],
-    #     ])
+  
     scene.add(camera, pose=camera_pose)
 
     # --- Рендеринг сцены ---
@@ -206,66 +187,21 @@ def move_model(x, y, z, mesh, invert_colors=True):
 
     return image
 
-# def process_camera_rotation(args):
-#     angle, file_name, mesh, target_image, min_dif = args
-#     angle_x, angle_y, angle_z = angle
-#     image = move_model(angle_x, angle_y, angle_z, mesh)
-#     if image is None:
-#         return None, min_dif
-#     image.save(file_name, "JPEG")
-#     model_image = cv2.imread(file_name, cv2.IMREAD_GRAYSCALE)
-#     dif,_ = difference(model_image, target_image)
-#     return angle, dif if dif is not None and dif < min_dif else None
-
-# def render_images_camera_rotation(mesh, target_image, min_dif):
-#     best_angles = (0, 0, 0)
-#     max_extent, center, distance_mesh = calculate_model_scale_and_camera_distance(mesh)
-#     chunks = cut_directions(max_extent)
-#     for direction in chunks:
-#         with ProcessPoolExecutor() as executor:
-#             results = executor.map(
-#                 process_camera_rotation,
-#                 [(angle, file_name, mesh, target_image, min_dif) for angle, file_name in direction]
-#             )
-#             for angle, dif in results:
-#                 if dif is not None:
-#                     if dif < min_dif:
-#                         min_dif = dif
-#                         best_angles = angle
-
-#     return best_angles, min_dif
-
-# def full_directions(max_extent):
-#     direction = []
-#     for x in np.arange(-max_extent, 2*max_extent, max_extent):
-#         for y in np.arange(-max_extent, 2*max_extent, max_extent):
-#             point = (x, y, 0)
-#             file_name = f'./sides/{x}_{y}_0.jpg'
-#             dir = (point, file_name)
-#             direction.append(dir)
-#     return direction
-
-# def cut_directions(max_extent):
-#     directions = full_directions(max_extent)
-#     chunk_size = 4
-#     chunks = [directions[i:i + chunk_size] for i in range(0, len(directions), chunk_size)]
-#     return chunks
-
-
-def refine_search(mesh, target_image, min_dif, initial_step=1.0, min_step=0.1, step_factor=0.5, points_to_check=5):
+def refine_search(mesh, target_image, min_dif, initial_step=1.0, min_step=0.1, step_factor=0.5, points_to_check=5, threshold_points_to_stop=3):
     """
-    Реализация итеративного поиска минимальной точки.
+    Реализация итеративного поиска минимальной точки с досрочным завершением итерации.
     
     :param mesh: 3D-модель
     :param target_image: Целевое изображение
+    :param min_dif: Текущая минимальная разница
     :param initial_step: Начальный шаг для поиска
     :param min_step: Минимальный шаг для остановки поиска
     :param step_factor: Фактор уменьшения шага на каждой итерации
     :param points_to_check: Число точек для проверки в первой итерации
+    :param threshold_points_to_stop: Число последовательных увеличений разницы для прекращения итерации
     :return: Координаты минимальной точки и минимальная разница
     """
     def generate_points_around(center, step):
-        print('1')
         """Генерация точек вокруг заданного центра с указанным шагом."""
         x, y, z = center
         points = []
@@ -273,12 +209,23 @@ def refine_search(mesh, target_image, min_dif, initial_step=1.0, min_step=0.1, s
             for dy in np.arange(-step, step + step / points_to_check, step / points_to_check):
                 points.append((x + dx, y + dy, z))
         return points
+    
+    def generate_points_in_circle(center, step, points_to_check):
+        """Генерация точек по кругу вокруг заданного центра."""
+        x, y, z = center
+        angles = np.linspace(0, 2 * np.pi, points_to_check, endpoint=False)  # Углы круга
+        points = []
+        for angle in angles:
+            dx = step * np.cos(angle)
+            dy = step * np.sin(angle)
+            points.append((x + dx, y + dy, z))  # Точки на окружности
+        return points
+
 
     def evaluate_points(points):
         """Оценка разницы для списка точек."""
         results = []
         for point in points:
-            print(point)
             image = move_model(*point, mesh)
             if image is None:
                 continue
@@ -286,22 +233,49 @@ def refine_search(mesh, target_image, min_dif, initial_step=1.0, min_step=0.1, s
             dif, _ = difference(model_image, target_image)
             if dif is not None:  # Проверяем, что разница не None
                 results.append((point, dif))
-                image.save(f'./sides/{point}_0.jpg', "JPEG")
-            # results.append((point, dif))
         return results
-    
+
     max_extent, center, distance_mesh = calculate_model_scale_and_camera_distance(mesh)
     current_step = max_extent
     current_point = center  # Стартовая точка
-    # min_dif = float('inf')
     best_point = current_point
 
     while current_step > min_step:
-        points = generate_points_around(current_point, current_step)
-        results = evaluate_points(points)
-        if not results:  # Если список пуст
+        print(current_step)
+        points = generate_points_in_circle(current_point, current_step, points_to_check)
+        # points = generate_points_around(current_point, current_step)
+        results = []
+        consecutive_increases = 0  # Счетчик увеличений разницы
+        prev_dif = float('inf')  # Начальное значение для сравнения разницы
+        
+        for point in points:
+            # Оцениваем текущую точку
+            print(f"Текущая точка: x={point[0]:.3f}, y={point[1]:.3f}, z={point[2]:.3f}")
+            image = move_model(*point, mesh)
+            if image is None:
+                continue
+            model_image = np.array(image.convert('L'))
+            dif, _ = difference(model_image, target_image)
+            if dif is not None:
+                results.append((point, dif))
+                
+                # Проверка последовательного увеличения разницы
+                if dif >= prev_dif:
+                    consecutive_increases += 1
+                else:
+                    consecutive_increases = 0  # Сбрасываем счетчик при улучшении
+                
+                prev_dif = dif
+                print('dif: ', dif, consecutive_increases)
+                # Если превышен порог увеличений, прекращаем текущую итерацию
+                if consecutive_increases >= threshold_points_to_stop:
+                    break
+
+        # Если результаты пустые, уменьшаем шаг и продолжаем
+        if not results:
             current_step *= step_factor
             continue
+
         # Сортируем точки по разнице
         results.sort(key=lambda x: x[1])
 
@@ -320,12 +294,10 @@ def refine_search(mesh, target_image, min_dif, initial_step=1.0, min_step=0.1, s
 
 
 
-
-
 if __name__ == '__main__':
     
-    input_img = r'./try11noBack.jpg'
-    input_obj_file = r'./od1.obj'
+    input_img = r'./fig2.jpg'
+    input_obj_file = r'./mod2.obj'
 
     mesh_or = trimesh.load(input_obj_file)
     min_dif = float('inf')
