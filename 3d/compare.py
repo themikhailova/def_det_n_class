@@ -40,9 +40,18 @@ def difference(model_image, target_image):
     try:
         model_mask = mask_creation(model_image)
         target_mask = mask_creation(target_image)
-        resized_model = resize_img(target_mask, model_mask)
-        total_diff, diff_matrix = compute_difference(resized_model, target_mask)
-        return total_diff, diff_matrix
+        target_h, target_w = target_mask.shape
+        model_h, model_w = model_mask.shape
+        
+        if(target_h >= target_w and model_h >= model_w) or (target_h <= target_w and model_h <= model_w):
+            # cv2.imshow('model_mask', model_mask)
+            # # cv2.imshow('target_mask', target_mask)
+            # cv2.waitKey(0)
+            print(target_mask.shape, model_mask.shape)
+            resized_model = resize_img(target_mask, model_mask)
+            total_diff, diff_matrix = compute_difference(resized_model, target_mask)
+            return total_diff, diff_matrix
+        else: return None, None
     except ValueError as e:
         print(f"Error: {e}")
         return None, None
