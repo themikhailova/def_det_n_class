@@ -1,7 +1,5 @@
 import trimesh
 import numpy as np
-import io
-import copy
 import time
 import cv2
 from compare import difference
@@ -44,16 +42,17 @@ def rot(angle_x, angle_y, angle_z, mesh, invert_colors=True):
     scene.add(trimesh_mesh)
 
     # Настройка источника света
-    light = pyrender.PointLight(color=np.ones(3), intensity=50.0)  # Настраиваем интенсивность света
+    light = pyrender.DirectionalLight(color=np.ones(3), intensity=5.0)  # Настраиваем интенсивность света
     light_pose = np.eye(4)  # Положение источника света (по умолчанию в центре)
     scene.add(light, pose=light_pose)
+    _, _, distance_mesh = calculate_model_scale_and_camera_distance(rotated_mesh)
 
     # Камера с фиксированным углом обзора
     camera = pyrender.PerspectiveCamera(yfov=np.pi / 2.0)
     camera_pose = np.array([
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 2.5],
+                [0.0, 0.0, 1.0, distance_mesh],
                 [0.0, 0.0, 0.0, 1.0],
             ])
     scene.add(camera, pose=camera_pose)
@@ -157,7 +156,7 @@ def calculate_model_scale_and_camera_distance(mesh, yfov=np.pi / 3.0):
 
     return max_extent, center, distance
 
-def move_model(x, y, z, mesh, invert_colors=True):
+def move_model(x, y, z, mesh, invert_colors=True, save=False):
     '''
     Перемещает модель на заданное смещение в пространстве и рендерит её изображение 
     (по сути, то же, что и rot, но, вместо поворота модели вокруг своей оси, 
@@ -178,17 +177,20 @@ def move_model(x, y, z, mesh, invert_colors=True):
     # Преобразование модели для использования с pyrender и добавление модели на сцену
     pyrender_mesh = pyrender.Mesh.from_trimesh(moved_mesh, smooth=True)
     scene.add(pyrender_mesh)
+    
     # Настройка освещения
-    if x == 0 and y == 0:
-        light = pyrender.PointLight(color=np.ones(3), intensity=5.0)
+    if (x == 0 and y == 0):
+        light = pyrender.DirectionalLight(color=np.ones(3), intensity=5.0)
     else:
-        light = pyrender.PointLight(color=np.ones(3), intensity=50.0) 
+        light = pyrender.DirectionalLight(color=np.ones(3), intensity=50.0) 
     light_pose = np.eye(4)  # Свет в фиксированной позиции (в центре сцены)
     scene.add(light, pose=light_pose)
 
     # Рассчитываем масштаб и расстояние камеры
     _, _, distance_mesh = calculate_model_scale_and_camera_distance(moved_mesh)
-
+    if save: 
+        distance_mesh = 2.5
+        
     # Камера с фиксированным углом обзора
     camera = pyrender.PerspectiveCamera(yfov=np.pi / 2.0)
     camera_pose = np.array([
@@ -200,7 +202,7 @@ def move_model(x, y, z, mesh, invert_colors=True):
     scene.add(camera, pose=camera_pose)
 
     # Рендеринг сцены
-    r = pyrender.OffscreenRenderer(1024, 1024)  # Создаем рендерер для захвата изображения
+    r = pyrender.OffscreenRenderer(1024, 768)  # Создаем рендерер для захвата изображения
     color, _ = r.render(scene)  # Рендерим сцену в изображение
 
     # Преобразование результата в изображение
@@ -242,7 +244,7 @@ def refine_search(mesh, target_image, min_dif, min_step=0.1, step_factor=0.5, po
     current_point = center  # Стартовая точка
     best_point = current_point # лучшая точка на данный момент
     prev_dif = float('inf')  # Начальное значение для сравнения разницы
-
+    print('center: ', center)
     while current_step > min_step:
         print(current_step)
         # Генерация точек на окружности вокруг текущей точки
@@ -259,8 +261,13 @@ def refine_search(mesh, target_image, min_dif, min_step=0.1, step_factor=0.5, po
                 continue
             # изображение преобразуется в градации серого
             model_image = np.array(image.convert('L'))
+            file_name = 'notAresult.jpg'
+            image.save(file_name, "JPEG")
+            # Загружаем сохраненное изображение как grayscale
+            model_image = cv2.imread(file_name, cv2.IMREAD_GRAYSCALE)
             # разница между изображением модели и целевым изображением
             dif, _ = difference(model_image, target_image)
+            print(dif)
             if dif is not None:
                 results.append((point, dif))
                 
@@ -297,12 +304,23 @@ def refine_search(mesh, target_image, min_dif, min_step=0.1, step_factor=0.5, po
 
     return best_point, min_dif
 
+def save_result_img(move_point, mesh):
+    x, y, z = move_point
+    print(x,y,z)
+    image = move_model(x, y, z, mesh, save=True)
+    # Сохраняем изображение в file_name
+    file_name = 'result.jpg'
+    image.save(file_name, "JPEG")
+    # Загружаем сохраненное изображение как grayscale
+    model_image = cv2.imread(file_name, cv2.IMREAD_ANYCOLOR)
+    cv2.imshow('model_image', model_image)
+    cv2.waitKey(0)
 
 
 if __name__ == '__main__':
     
-    input_img = r'./fig1.jpg'
-    input_obj_file = r'./mod1.obj'
+    input_img = r'./od_their_ph.jpg'
+    input_obj_file = r'./od_their.obj'
 
     mesh_or = trimesh.load(input_obj_file)
     min_dif = float('inf')
@@ -329,23 +347,25 @@ if __name__ == '__main__':
 
 
     print(best_camera_angles, min_difference, angles, min_dif)
+    print(f"result точка: x={best_camera_angles[0]:.3f}, y={best_camera_angles[1]:.3f}, z={best_camera_angles[2]:.3f}")
+    save_result_img(best_camera_angles, rotated_mesh)
+    
+    # scene = trimesh.Scene(rotated_mesh)
+    # scene.camera.resolution = (1024, 1024)
+    # x, y, z = best_camera_angles
+    # cam_rot = np.array([0, 0, 0])
+    # center_point = np.array(rotated_mesh.centroid) + np.array([x, y, z]) 
+    # print(center_point)
+    # scene.set_camera(angles=cam_rot, distance=60, center=center_point)
 
-    scene = trimesh.Scene(rotated_mesh)
-    scene.camera.resolution = (1024, 1024)
-    x, y, z = best_camera_angles
-    cam_rot = np.array([0, 0, 0])
-    center_point = np.array(rotated_mesh.centroid) + np.array([x, y, z]) 
-    print(center_point)
-    scene.set_camera(angles=cam_rot, distance=60, center=center_point)
+    # output_obj_file_rotated = './rotated_model.obj'
+    # rotated_mesh.export(output_obj_file_rotated)
+    # finish = time.time()
+    # print(f"Повернутая модель: {output_obj_file_rotated}")
 
-    output_obj_file_rotated = './rotated_model.obj'
-    rotated_mesh.export(output_obj_file_rotated)
-    finish = time.time()
-    print(f"Повернутая модель: {output_obj_file_rotated}")
+    # rotated_mesh.show()
 
-    rotated_mesh.show()
+    # res_msec = (finish - start) * 1000
+    # print('Время работы в миллисекундах: ', res_msec)
 
-    res_msec = (finish - start) * 1000
-    print('Время работы в миллисекундах: ', res_msec)
-
-    print("Изображения успешно сохранены.")
+    # print("Изображения успешно сохранены.")
