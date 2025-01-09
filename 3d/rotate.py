@@ -12,19 +12,21 @@ from PIL import Image, ImageOps
 
 def rot(angle_x, angle_y, angle_z, mesh, invert_colors=True):
     '''
-    Поворачивает модель на заданный угол с использованием pyrender.
+    поворот 3D-модели на заданные углы вокруг осей X, Y, Z и рендерит изображение модели
+    используется на первом этапе - проверка 6 сторон модели
     :param angle_x: угол поворота по оси X в градусах
     :param angle_y: угол поворота по оси Y в градусах
     :param angle_z: угол поворота по оси Z в градусах
-    :param mesh: 3D-модель (объект trimesh)
-    :param invert_colors: флаг для инверсии цветов изображения (по умолчанию False)
+    :param mesh: 3D-модель 
+    :param invert_colors: флаг для инверсии цветов изображения
     :return: изображение модели, повернутой на заданный угол
     '''
+    # Преобразуем углы из градусов в радианы
     angle_x_rad = np.radians(angle_x)
     angle_y_rad = np.radians(angle_y)
     angle_z_rad = np.radians(angle_z)
 
-    # Матрицы поворота
+    # Создаем матрицы поворота для каждой оси
     rotation_matrix_x = trimesh.transformations.rotation_matrix(angle_x_rad, [1, 0, 0], mesh.centroid)
     rotation_matrix_y = trimesh.transformations.rotation_matrix(angle_y_rad, [0, 1, 0], mesh.centroid)
     rotation_matrix_z = trimesh.transformations.rotation_matrix(angle_z_rad, [0, 0, 1], mesh.centroid)
@@ -36,10 +38,8 @@ def rot(angle_x, angle_y, angle_z, mesh, invert_colors=True):
     rotated_mesh = mesh.copy()
     rotated_mesh.apply_transform(combined_rotation_matrix)
 
-    # --- Создание сцены с pyrender ---
+    # Создаем сцену для рендеринга
     scene = pyrender.Scene()
-
-    # Преобразование модели для использования с pyrender
     trimesh_mesh = pyrender.Mesh.from_trimesh(rotated_mesh, smooth=True)
     scene.add(trimesh_mesh)
 
@@ -48,11 +48,8 @@ def rot(angle_x, angle_y, angle_z, mesh, invert_colors=True):
     light_pose = np.eye(4)  # Положение источника света (по умолчанию в центре)
     scene.add(light, pose=light_pose)
 
-    max_extent, center, distance_mesh = calculate_model_scale_and_camera_distance(rotated_mesh)
-    # print((3*max_extent)/2, distance_mesh)
     # Камера с фиксированным углом обзора
     camera = pyrender.PerspectiveCamera(yfov=np.pi / 2.0)
-
     camera_pose = np.array([
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
@@ -61,11 +58,11 @@ def rot(angle_x, angle_y, angle_z, mesh, invert_colors=True):
             ])
     scene.add(camera, pose=camera_pose)
 
-    # --- Рендеринг сцены ---
+    # Рендеринг сцены
     r = pyrender.OffscreenRenderer(1024, 768)  # Создаём рендерер для захвата изображения
     color, _ = r.render(scene)  # Рендерим сцену в изображение
 
-    # Преобразование результата в изображение
+    # Преобразование в изображение
     image = Image.fromarray(color)
 
     # Инверсия цветов, если флаг установлен
@@ -78,6 +75,19 @@ def rot(angle_x, angle_y, angle_z, mesh, invert_colors=True):
     return image
 
 def process_direction(args):
+    '''
+    Обрабатывает заданный угол поворота модели, 
+    рендерит её и вычисляет разницу между результатом и целевым изображением
+    :param args: Кортеж параметров, включающий:
+                    angle: Углы поворота (X, Y, Z)
+                    file_name: Имя файла для сохранения рендера
+                    mesh: 3D-модель
+                    target_image: Целевое изображение (grayscale)
+                    min_dif: Текущая минимальная разница
+
+    :return: Углы поворота (X, Y, Z), Разница между рендером 
+    и целевым изображением (или минимальная разница, если текущая больше)
+    '''
     angle, file_name, mesh, target_image, min_dif = args
     angle_x, angle_y, angle_z = angle
 
@@ -86,13 +96,25 @@ def process_direction(args):
     if image is None:
         return None, min_dif
     
+    # Сохраняем изображение в file_name
     image.save(file_name, "JPEG")
+    # Загружаем сохраненное изображение как grayscale
     model_image = cv2.imread(file_name, cv2.IMREAD_GRAYSCALE)
+    # Вычисляем разницу между текущим изображением и целевым 
     dif,_ = difference(model_image, target_image)
 
     return angle, dif if dif is not None and dif < min_dif else min_dif
 
 def render_and_save_image_parallel(mesh, target_image, min_dif):
+    '''
+    Параллельно обрабатывает набор углов поворота модели и выбирает углы с минимальной разницей
+    :param mesh: 3D-модель
+    :param target_image: Целевое изображение
+    :param min_dif: Текущая минимальная разница
+
+    :return: Углы с минимальной разницей, Минимальная разница
+    '''
+    # Задаем углы для рендеринга
     directions = [
         ((0, 0, 0), './sides/front.jpg'),
         ((180, 0, 0), './sides/back.jpg'),
@@ -103,11 +125,13 @@ def render_and_save_image_parallel(mesh, target_image, min_dif):
     ]
     best_angles = (0, 0, 0)
 
+    # запускаем функцию process_direction для каждого набора углов параллельно
     with ProcessPoolExecutor() as executor:
         results = executor.map(
             process_direction,
             [(angle, file_name, mesh, target_image, min_dif) for angle, file_name in directions]
         )
+        # Обновляем минимальную разницу и лучшие углы поворота, если текущий результат лучше
         for angle, dif in results:
             print(angle, dif)
             if dif < min_dif:
@@ -117,64 +141,65 @@ def render_and_save_image_parallel(mesh, target_image, min_dif):
     return best_angles, min_dif
 
 def calculate_model_scale_and_camera_distance(mesh, yfov=np.pi / 3.0):
-    """
-    Рассчитывает масштаб модели и минимальное расстояние камеры для полного обзора.
-    :param mesh: 3D-модель (trimesh object)
+    '''
+    Рассчитывает масштаб модели и минимальное расстояние камеры для полного обзора
+    :param mesh: 3D-модель
     :param yfov: Поле зрения камеры (в радианах)
     :return: масштаб модели, минимальное расстояние камеры
-    """
+    '''
     # Получаем размеры модели
     bounding_box = mesh.bounding_box.extents  # Длина, ширина, высота
     max_extent = max(bounding_box)  # Максимальный размер вдоль осей
     center = mesh.bounding_box.centroid  # Центр модели
 
     # Минимальное расстояние камеры для полного обзора модели
-    distance = max_extent
+    distance = (3*max_extent+0.4)/2
 
     return max_extent, center, distance
 
 def move_model(x, y, z, mesh, invert_colors=True):
     '''
-    Перемещает модель в заданные координаты относительно сцены, фиксируя камеру и настраивая освещение как в функции rot.
+    Перемещает модель на заданное смещение в пространстве и рендерит её изображение 
+    (по сути, то же, что и rot, но, вместо поворота модели вокруг своей оси, 
+    двигаем ее по координатной плоскости XY, чтобы найти нужный угол)
+
     :param x, y, z: координаты смещения модели
     :param mesh: 3D-модель
     :return: изображение модели с новой позиции
     '''
-    # Перемещаем модель
+    # Создаем матрицу трансляции для смещения модели и применяем ее к копии модели
     translation_matrix = trimesh.transformations.translation_matrix([x, y, z])
     moved_mesh = mesh.copy()
     moved_mesh.apply_transform(translation_matrix)
 
-    # --- Создание сцены с pyrender ---
+    # Создаем сцену
     scene = pyrender.Scene()
 
-    # Преобразование модели для использования с pyrender
+    # Преобразование модели для использования с pyrender и добавление модели на сцену
     pyrender_mesh = pyrender.Mesh.from_trimesh(moved_mesh, smooth=True)
     scene.add(pyrender_mesh)
+    # Настройка освещения
     if x == 0 and y == 0:
         light = pyrender.PointLight(color=np.ones(3), intensity=5.0)
     else:
-        # --- Настройка освещения (как в rot) ---
-        light = pyrender.PointLight(color=np.ones(3), intensity=50.0)  # Интенсивность света
+        light = pyrender.PointLight(color=np.ones(3), intensity=50.0) 
     light_pose = np.eye(4)  # Свет в фиксированной позиции (в центре сцены)
     scene.add(light, pose=light_pose)
 
     # Рассчитываем масштаб и расстояние камеры
-    max_extent, center, distance_mesh = calculate_model_scale_and_camera_distance(moved_mesh)
-    # print((3*max_extent)/2, distance_mesh)
+    _, _, distance_mesh = calculate_model_scale_and_camera_distance(moved_mesh)
+
     # Камера с фиксированным углом обзора
     camera = pyrender.PerspectiveCamera(yfov=np.pi / 2.0)
-
     camera_pose = np.array([
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, (3*max_extent+0.4)/2],
+                [0.0, 0.0, 1.0, distance_mesh],
                 [0.0, 0.0, 0.0, 1.0],
             ])
-  
     scene.add(camera, pose=camera_pose)
 
-    # --- Рендеринг сцены ---
+    # Рендеринг сцены
     r = pyrender.OffscreenRenderer(1024, 1024)  # Создаем рендерер для захвата изображения
     color, _ = r.render(scene)  # Рендерим сцену в изображение
 
@@ -187,31 +212,21 @@ def move_model(x, y, z, mesh, invert_colors=True):
 
     return image
 
-def refine_search(mesh, target_image, min_dif, initial_step=1.0, min_step=0.1, step_factor=0.5, points_to_check=5, threshold_points_to_stop=3):
-    """
+def refine_search(mesh, target_image, min_dif, min_step=0.1, step_factor=0.5, points_to_check=5, threshold_points_to_stop=3):
+    '''
     Реализация итеративного поиска минимальной точки с досрочным завершением итерации.
     
     :param mesh: 3D-модель
     :param target_image: Целевое изображение
     :param min_dif: Текущая минимальная разница
-    :param initial_step: Начальный шаг для поиска
     :param min_step: Минимальный шаг для остановки поиска
     :param step_factor: Фактор уменьшения шага на каждой итерации
     :param points_to_check: Число точек для проверки в первой итерации
     :param threshold_points_to_stop: Число последовательных увеличений разницы для прекращения итерации
     :return: Координаты минимальной точки и минимальная разница
-    """
-    def generate_points_around(center, step):
-        """Генерация точек вокруг заданного центра с указанным шагом."""
-        x, y, z = center
-        points = []
-        for dx in np.arange(-step, step + step / points_to_check, step / points_to_check):
-            for dy in np.arange(-step, step + step / points_to_check, step / points_to_check):
-                points.append((x + dx, y + dy, z))
-        return points
-    
+    '''
     def generate_points_in_circle(center, step, points_to_check):
-        """Генерация точек по кругу вокруг заданного центра."""
+        '''Генерация точек по кругу вокруг заданного центра.'''
         x, y, z = center
         angles = np.linspace(0, 2 * np.pi, points_to_check, endpoint=False)  # Углы круга
         points = []
@@ -222,46 +237,36 @@ def refine_search(mesh, target_image, min_dif, initial_step=1.0, min_step=0.1, s
         return points
 
 
-    def evaluate_points(points):
-        """Оценка разницы для списка точек."""
-        results = []
-        for point in points:
-            image = move_model(*point, mesh)
-            if image is None:
-                continue
-            model_image = np.array(image.convert('L'))  # Преобразование в grayscale
-            dif, _ = difference(model_image, target_image)
-            if dif is not None:  # Проверяем, что разница не None
-                results.append((point, dif))
-        return results
-
-    max_extent, center, distance_mesh = calculate_model_scale_and_camera_distance(mesh)
-    current_step = max_extent
+    max_extent, center, _ = calculate_model_scale_and_camera_distance(mesh)
+    current_step = max_extent # начальный шаг 
     current_point = center  # Стартовая точка
-    best_point = current_point
+    best_point = current_point # лучшая точка на данный момент
+    prev_dif = float('inf')  # Начальное значение для сравнения разницы
 
     while current_step > min_step:
         print(current_step)
+        # Генерация точек на окружности вокруг текущей точки
         points = generate_points_in_circle(current_point, current_step, points_to_check)
-        # points = generate_points_around(current_point, current_step)
         results = []
         consecutive_increases = 0  # Счетчик увеличений разницы
-        prev_dif = float('inf')  # Начальное значение для сравнения разницы
-        
+            
         for point in points:
             # Оцениваем текущую точку
             print(f"Текущая точка: x={point[0]:.3f}, y={point[1]:.3f}, z={point[2]:.3f}")
+            # сдвигаем 3D-модель в новую позицию, соответствующую текущей точке
             image = move_model(*point, mesh)
             if image is None:
                 continue
+            # изображение преобразуется в градации серого
             model_image = np.array(image.convert('L'))
+            # разница между изображением модели и целевым изображением
             dif, _ = difference(model_image, target_image)
             if dif is not None:
                 results.append((point, dif))
                 
                 # Проверка последовательного увеличения разницы
                 if dif >= prev_dif:
-                    consecutive_increases += 1
+                    consecutive_increases += 1 # Если разница увеличилась, увеличивается счетчик
                 else:
                     consecutive_increases = 0  # Сбрасываем счетчик при улучшении
                 
@@ -296,8 +301,8 @@ def refine_search(mesh, target_image, min_dif, initial_step=1.0, min_step=0.1, s
 
 if __name__ == '__main__':
     
-    input_img = r'./fig2.jpg'
-    input_obj_file = r'./mod2.obj'
+    input_img = r'./fig1.jpg'
+    input_obj_file = r'./mod1.obj'
 
     mesh_or = trimesh.load(input_obj_file)
     min_dif = float('inf')
