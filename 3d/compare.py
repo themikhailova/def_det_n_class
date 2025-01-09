@@ -40,32 +40,35 @@ def difference(model_image, target_image):
     try:
         model_mask = mask_creation(model_image)
         target_mask = mask_creation(target_image)
-        target_h, target_w = target_mask.shape
-        model_h, model_w = model_mask.shape
-        
-        if(target_h >= target_w and model_h >= model_w) or (target_h <= target_w and model_h <= model_w):
-            # cv2.imshow('model_mask', model_mask)
-            # # cv2.imshow('target_mask', target_mask)
-            # cv2.waitKey(0)
-            print(target_mask.shape, model_mask.shape)
+        # cv2.imshow('target_mask', target_mask)
+        model_mask_h, model_mask_w = model_mask.shape
+        img_mask_h, img_mask_w = target_mask.shape
+        # print(model_mask.shape, target_mask.shape)
+        if((model_mask_h > model_mask_w and img_mask_h > img_mask_w) or (model_mask_h < model_mask_w and img_mask_h < img_mask_w)):
             resized_model = resize_img(target_mask, model_mask)
+            
+            # cv2.imshow('resized_model', resized_model)
+            # cv2.waitKey(0)
             total_diff, diff_matrix = compute_difference(resized_model, target_mask)
             return total_diff, diff_matrix
-        else: return None, None
+        else:
+            print('100% not same')
+            dif = None
+            return dif, dif
     except ValueError as e:
         print(f"Error: {e}")
         return None, None
 
-# Использование
-input_model_img = './front.jpg'
-input_img = 'try11.jpg'
+# # Использование
+# input_model_img = './sides/0.0_0.717722_0.jpg'
+# input_img = 'try11noBack.jpg'
 
-model_image = cv2.imread(input_model_img, cv2.IMREAD_GRAYSCALE)
-target_image = cv2.imread(input_img, cv2.IMREAD_GRAYSCALE)
+# model_image = cv2.imread(input_model_img, cv2.IMREAD_GRAYSCALE)
+# target_image = cv2.imread(input_img, cv2.IMREAD_GRAYSCALE)
 
-diff, diff_matrix = difference(model_image, target_image)
-if diff is not None:
-    print(f"Total difference: {diff}")
-    cv2.imshow('Difference Matrix', diff_matrix)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+# diff, diff_matrix = difference(model_image, target_image)
+# if diff is not None:
+#     print(f"Total difference: {diff}")
+#     cv2.imshow('Difference Matrix', diff_matrix)
+#     cv2.waitKey(0)
+#     cv2.destroyAllWindows()
