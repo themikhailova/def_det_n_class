@@ -42,8 +42,15 @@ def rot(angle_x, angle_y, angle_z, mesh, invert_colors=True):
     scene.add(trimesh_mesh)
 
     # Настройка источника света
-    light = pyrender.DirectionalLight(color=np.ones(3), intensity=5.0)  # Настраиваем интенсивность света
+    light = pyrender.DirectionalLight(color=np.ones(3), intensity=1.0)  # Настраиваем интенсивность света 
     light_pose = np.eye(4)  # Положение источника света (по умолчанию в центре)
+
+    light_pose = np.array([
+        [1.0, 0.0, 0.0, 2.0],
+        [0.0, 1.0, 0.0, 2.0],
+        [0.0, 0.0, 1.0, 2.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ])
     scene.add(light, pose=light_pose)
     _, _, distance_mesh = calculate_model_scale_and_camera_distance(rotated_mesh)
 
@@ -52,7 +59,7 @@ def rot(angle_x, angle_y, angle_z, mesh, invert_colors=True):
     camera_pose = np.array([
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, distance_mesh],
+                [0.0, 0.0, 1.0, 2.5],
                 [0.0, 0.0, 0.0, 1.0],
             ])
     scene.add(camera, pose=camera_pose)
@@ -182,8 +189,15 @@ def move_model(x, y, z, mesh, invert_colors=True, save=False):
     if (x == 0 and y == 0):
         light = pyrender.DirectionalLight(color=np.ones(3), intensity=5.0)
     else:
-        light = pyrender.DirectionalLight(color=np.ones(3), intensity=50.0) 
-    light_pose = np.eye(4)  # Свет в фиксированной позиции (в центре сцены)
+        light = pyrender.DirectionalLight(color=np.ones(3), intensity=5.0) 
+    light_pose = np.array([
+        [1.0, 0.0, 0.0, 2.0],
+        [0.0, 1.0, 0.0, 2.0],
+        [0.0, 0.0, 1.0, 2.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ])
+    # scene.add(light, pose=light_pose)
+    # light_pose = np.eye(4)  # Свет в фиксированной позиции (в центре сцены)
     scene.add(light, pose=light_pose)
 
     # Рассчитываем масштаб и расстояние камеры
@@ -319,10 +333,12 @@ def save_result_img(move_point, mesh):
 
 if __name__ == '__main__':
     
-    input_img = r'./od_their_ph.jpg'
-    input_obj_file = r'./od_their.obj'
+    input_img = r'./fig4.jpg'
+    input_obj_file = r'./mod4.obj'
 
     mesh_or = trimesh.load(input_obj_file)
+    # Центрируем модель относительно начала координат
+    mesh_or.apply_translation(-mesh_or.bounds.mean(axis=0)) 
     min_dif = float('inf')
     target_image = cv2.imread(input_img, cv2.IMREAD_GRAYSCALE)
 
