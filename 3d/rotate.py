@@ -7,6 +7,7 @@ from concurrent.futures import ProcessPoolExecutor
 import pyrender
 from PIL import Image, ImageOps
 
+from det_aligning import align
 
 def rot(angle_x, angle_y, angle_z, mesh, invert_colors=True):
     '''
@@ -203,7 +204,7 @@ def move_model(x, y, z, mesh, invert_colors=True, save=False):
     # Рассчитываем масштаб и расстояние камеры
     _, _, distance_mesh = calculate_model_scale_and_camera_distance(moved_mesh)
     if save: 
-        distance_mesh = 2.5
+        distance_mesh = 1.5 # для попадания в кадр крайних нужно минимум 2.5 но это слишком далеко для хорошего качества
         
     # Камера с фиксированным углом обзора
     camera = pyrender.PerspectiveCamera(yfov=np.pi / 2.0)
@@ -217,14 +218,48 @@ def move_model(x, y, z, mesh, invert_colors=True, save=False):
 
     # Рендеринг сцены
     r = pyrender.OffscreenRenderer(1024, 768)  # Создаем рендерер для захвата изображения
-    color, _ = r.render(scene)  # Рендерим сцену в изображение
+    if save: 
+        # r = pyrender.OffscreenRenderer(1920, 1080)  # Full HD разрешение
+        # spot_light = pyrender.SpotLight(color=np.ones(3), intensity=3.0, innerConeAngle=np.pi/16.0, outerConeAngle=np.pi/6.0)
+        # scene.add(spot_light, pose=light_pose)
+        light = pyrender.DirectionalLight(color=np.ones(3), intensity=35.0) 
+        light_pose = np.array([
+            [1.0, 0.0, 0.0, 2.0],
+            [0.0, 1.0, 0.0, 2.0],
+            [0.0, 0.0, 1.0, 2.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ])
+        # scene.add(light, pose=light_pose)
+        # light_pose = np.eye(4)  # Свет в фиксированной позиции (в центре сцены)
+        scene.add(light, pose=light_pose)
 
-    # Преобразование результата в изображение
-    image = Image.fromarray(color)
-    if invert_colors:
-        image = ImageOps.invert(image)
-    # Очищаем рендерер
-    r.delete()
+        pyrender_mesh = pyrender.Mesh.from_trimesh(moved_mesh, smooth=True)
+        scene.add(pyrender_mesh)
+
+        camera = pyrender.PerspectiveCamera(yfov=np.pi / 2.0)
+        camera_pose = np.array([
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 2.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ])
+        scene.add(camera, pose=camera_pose)
+
+        color, _ = r.render(scene)
+        image = Image.fromarray(color)
+        if invert_colors:
+            image = ImageOps.invert(image)
+        image = ImageOps.autocontrast(image)
+        r.delete()
+    else:
+        color, _ = r.render(scene)  # Рендерим сцену в изображение
+
+        # Преобразование результата в изображение
+        image = Image.fromarray(color)
+        if invert_colors:
+            image = ImageOps.invert(image)
+        # Очищаем рендерер
+        r.delete()
 
     return image
 
@@ -333,17 +368,20 @@ def save_result_img(move_point, mesh):
 
 if __name__ == '__main__':
     
-    input_img = r'./fig4.jpg'
-    input_obj_file = r'./mod4.obj'
+    input_img = r'./fig3.jpg'
+    input_obj_file = r'./mod3.obj'
 
     mesh_or = trimesh.load(input_obj_file)
     # Центрируем модель относительно начала координат
     mesh_or.apply_translation(-mesh_or.bounds.mean(axis=0)) 
     min_dif = float('inf')
-    target_image = cv2.imread(input_img, cv2.IMREAD_GRAYSCALE)
+    # target_image = cv2.imread(input_img, cv2.IMREAD_GRAYSCALE)
 
     start = time.time()
-
+    
+    target_image = align(input_img)
+    cv2.imshow('target', target_image)
+    cv2.waitKey(0)
     angles, min_dif = render_and_save_image_parallel(mesh_or, target_image, min_dif)
     print(angles, min_dif)
 
