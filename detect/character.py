@@ -3,38 +3,16 @@ import numpy as np
 import time
 
 from features import calculate_features, save_features_to_excel
-# from classify_anomalies import classify_anomaly
+from classify_anomalies import classify_anomaly
 from detect_anomalies import detect_and_highlight_anomalies, detect_differ
 from contours_connection import connect_contours, union_contours, remove_nested_contours, increase_ellipse
 
-# def crop_to_contour(image, contour):
-#     '''
-#     Обрезает изображение по ограничивающему прямоугольнику заданного контура
-#     :param image: Исходное изображение
-#     :param contour: Контур объекта
-#     :return: Обрезанное изображение
-#     '''
-#     x, y, contour_width, contour_height = cv2.boundingRect(contour)
-#     cropped_image = image[y:y+contour_height, x:x+contour_width]
-#     return cropped_image
-
-# def resize_img(target, model):
-#     target_h, target_w = target.shape
-#     model_h, model_w = model.shape
-#     scale = min(target_h / model_h, target_w / model_w)
-#     resized_model = cv2.resize(model, (int(model_w * scale), int(model_h * scale)), interpolation=cv2.INTER_AREA)
-#     mask = np.zeros_like(target, dtype=np.uint8)
-#     y_offset = (target_h - resized_model.shape[0]) // 2
-#     x_offset = (target_w - resized_model.shape[1]) // 2
-#     mask[y_offset:y_offset + resized_model.shape[0], x_offset:x_offset + resized_model.shape[1]] = resized_model
-#     return mask
-
 def resize_and_align_reference(input_image, reference_image):
     """
-    "Вырезает" деталь из reference_image по наибольшему контуру, создает черный фон по размерам input_image и вставляет вырезанную деталь в соответствующее место.
-    :param input_image: Входное изображение, к размеру которого нужно привести reference_image.
-    :param reference_image: Эталонное изображение, которое нужно масштабировать и привести к размеру input_image.
-    :return: Преобразованное reference_image.
+    "Вырезает" деталь из reference_image по наибольшему контуру, создает черный фон по размерам input_image и вставляет вырезанную деталь в соответствующее место
+    :param input_image: Входное изображение, к размеру которого нужно привести reference_image
+    :param reference_image: Эталонное изображение, которое нужно масштабировать и привести к размеру input_image
+    :return: Преобразованное reference_image
     """
     # Преобразуем изображения в оттенки серого
     input_gray = cv2.cvtColor(input_image, cv2.COLOR_BGR2GRAY)
