@@ -3,17 +3,84 @@ import numpy as np
 import time
 
 from features import calculate_features, save_features_to_excel
-from classify_anomalies import classify_anomaly
+# from classify_anomalies import classify_anomaly
 from detect_anomalies import detect_and_highlight_anomalies, detect_differ
 from contours_connection import connect_contours, union_contours, remove_nested_contours, increase_ellipse
 
+# def crop_to_contour(image, contour):
+#     '''
+#     Обрезает изображение по ограничивающему прямоугольнику заданного контура
+#     :param image: Исходное изображение
+#     :param contour: Контур объекта
+#     :return: Обрезанное изображение
+#     '''
+#     x, y, contour_width, contour_height = cv2.boundingRect(contour)
+#     cropped_image = image[y:y+contour_height, x:x+contour_width]
+#     return cropped_image
+
+# def resize_img(target, model):
+#     target_h, target_w = target.shape
+#     model_h, model_w = model.shape
+#     scale = min(target_h / model_h, target_w / model_w)
+#     resized_model = cv2.resize(model, (int(model_w * scale), int(model_h * scale)), interpolation=cv2.INTER_AREA)
+#     mask = np.zeros_like(target, dtype=np.uint8)
+#     y_offset = (target_h - resized_model.shape[0]) // 2
+#     x_offset = (target_w - resized_model.shape[1]) // 2
+#     mask[y_offset:y_offset + resized_model.shape[0], x_offset:x_offset + resized_model.shape[1]] = resized_model
+#     return mask
+
+def resize_and_align_reference(input_image, reference_image):
+    """
+    "Вырезает" деталь из reference_image по наибольшему контуру, создает черный фон по размерам input_image и вставляет вырезанную деталь в соответствующее место.
+    :param input_image: Входное изображение, к размеру которого нужно привести reference_image.
+    :param reference_image: Эталонное изображение, которое нужно масштабировать и привести к размеру input_image.
+    :return: Преобразованное reference_image.
+    """
+    # Преобразуем изображения в оттенки серого
+    input_gray = cv2.cvtColor(input_image, cv2.COLOR_BGR2GRAY)
+    reference_gray = cv2.cvtColor(reference_image, cv2.COLOR_BGR2GRAY)
+
+    # Находим наибольшие контуры на обоих изображениях
+    contours_input, _ = cv2.findContours(input_gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours_ref, _ = cv2.findContours(reference_gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    max_contour_input = max(contours_input, key=cv2.contourArea) if contours_input else None
+    max_contour_ref = max(contours_ref, key=cv2.contourArea) if contours_ref else None
+
+    if max_contour_input is None or max_contour_ref is None:
+        raise ValueError("Не удалось найти контуры на одном из изображений.")
+
+    # Вычисляем прямоугольники, охватывающие наибольшие контуры
+    x_input, y_input, w_input, h_input = cv2.boundingRect(max_contour_input)
+    x_ref, y_ref, w_ref, h_ref = cv2.boundingRect(max_contour_ref)
+
+    # Вырезаем деталь из reference_image
+    detail = reference_image[y_ref:y_ref+h_ref, x_ref:x_ref+w_ref]
+
+    # Масштабируем деталь к размерам прямоугольника на input_image
+    scaled_detail = cv2.resize(detail, (w_input, h_input), interpolation=cv2.INTER_LINEAR)
+
+    # Создаем черный фон по размерам input_image
+    input_h, input_w = input_image.shape[:2]
+    aligned_reference = np.zeros((input_h, input_w, 3), dtype=np.uint8)
+
+    # Вставляем масштабированную деталь в центр соответствующего прямоугольника
+    aligned_reference[y_input:y_input+h_input, x_input:x_input+w_input] = scaled_detail
+
+    return aligned_reference
 
 def detect_and_save_anomalies(input_image, reference_image, output_folder, threshold=50, region_size=0.05, min_anomaly_size=20, dilate_iter=5):
     """
     Основной алгоритм обнаружения аномалий и их сохранения в виде отдельных изображений.
     """  
+    # Приведение reference_image к input_image
+    reference_image = resize_and_align_reference(input_image, reference_image)
+    # cv2.imshow('input_image', input_image)
+    # cv2.imshow('reference_image', reference_image)
+    # cv2.waitKey(0)
     input_gray = cv2.cvtColor(input_image, cv2.COLOR_BGR2GRAY)
     contours_max, _ = cv2.findContours(input_gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
     # наибольший контур по площади
     max_contour = max(contours_max, key=cv2.contourArea) if contours_max else None
     if max_contour is not None:
@@ -37,6 +104,9 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
         _, detailed_mask = detect_and_highlight_anomalies(input_gray)
         _, mask_ref = detect_and_highlight_anomalies(reference_gray, pixel_diff_threshold=20)
         mask_ref = cv2.bitwise_not(mask_ref)
+        cv2.imshow('detailed_mask', detailed_mask)
+        cv2.imshow('mask_ref', mask_ref)
+        cv2.waitKey(0)
         detailed_mask_combined = cv2.bitwise_and(detailed_mask, mask_ref)
         
         _, differ = detect_differ(input_gray2, reference_gray2, region_size_ratio=0.1)
@@ -60,8 +130,8 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
         contours = contours_new   
         contours = connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid, min_dist=15)
         contours = connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid, min_dist=15)
-        # # contours = connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid)
-        # # contours = connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid)
+        # contours = connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid, min_dist=15)
+        # contours = connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid, min_dist=15)
 
         # # # contours, flag = union_contours(contours, input_gray, max_area, max_perimeter, max_centroid)
 
@@ -81,7 +151,7 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
 
             features = calculate_features(contour, input_gray, max_area, max_perimeter, max_centroid)
 
-            anomaly_type, colour = classify_anomaly(features, contour, input_gray)
+            anomaly_type, colour = None, None
             if anomaly_type is None:
                 colour = (255,255,255)
                 anomaly_type = 'Unknown' 
@@ -121,8 +191,8 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
         cv2.waitKey(0)
     return output_image
 
-input_image = cv2.imread("./5.jpg")
-reference_image = cv2.imread("./6.jpg")
+input_image = cv2.imread("./fig1.jpg")
+reference_image = cv2.imread("./result1.jpg")
 output_folder = "./output_anomalies/"
 
 start = time.time()
