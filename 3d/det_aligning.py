@@ -101,7 +101,7 @@ def align(img):
 
     # Поворот изображений
     image1 = rotate_image(image1, angle1)
-    image1 = cv2.cvtColor(image1, cv2.COLOR_BGR2GRAY)
+    # image1 = cv2.cvtColor(image1, cv2.COLOR_BGR2GRAY)
     return image1
 
 # # Отображение результатов
