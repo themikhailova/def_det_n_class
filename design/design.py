@@ -183,7 +183,7 @@ class Ui_MainWindow(object):
         self.insert_template.setText(_translate("MainWindow", "Добавить шаблон"))
 
 
-class Ui_AddTemplateDialog(object):
+class Ui_SelectTemplateDialog(object):
     """Интерфейс диалогового окна для добавления шаблона"""
     def setupUi(self, Dialog):
         Dialog.setObjectName("AddTemplateDialog")
