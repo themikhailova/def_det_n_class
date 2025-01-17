@@ -10,6 +10,9 @@ from PyQt5.QtCore import QAbstractTableModel, Qt
 # Константа для регулярного выражения фильтрации изображений
 IMAGE_PATTERN = re.compile(r'.*\.(png|jpg|jpeg|gif|bmp)$', re.IGNORECASE)
 
+# Константа для отступов в `QListWidget`
+LIST_WIDGET_PADDING = 10  # Отступы внутри QListWidget
+
 class SelectTemplateDialog(QtWidgets.QDialog):
     """Диалоговое окно для добавления или редактирования шаблона"""
 
@@ -237,7 +240,7 @@ class MainApp(QtWidgets.QMainWindow):
             pixmap = QtGui.QPixmap(str(image_file))
 
             # Масштабируем изображение к ширине QListWidget
-            widget_width = self.ui.image_list.width() - 10  # Учитываем отступы
+            widget_width = self.ui.image_list.width() - LIST_WIDGET_PADDING  # Учитываем отступы
             scaled_pixmap = pixmap.scaled(
                 widget_width,
                 widget_width,  # Используем квадратное изображение
