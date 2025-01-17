@@ -32,6 +32,9 @@ class SelectTemplateDialog(QtWidgets.QDialog):
 
     def on_save_button_clicked(self):
         """Обработчик нажатия кнопки 'Сохранить'"""
+        # Принудительно завершить редактирование текущей ячейки таблицы
+        self.ui.table.clearFocus()
+
         # Константы для индексов ячеек
         NAME_ROW, NAME_COL = 0, 0
         CODE_ROW, CODE_COL = 0, 1
@@ -39,6 +42,7 @@ class SelectTemplateDialog(QtWidgets.QDialog):
         # Извлекаем элементы из таблицы
         name_item = self.ui.table.item(NAME_ROW, NAME_COL)
         code_item = self.ui.table.item(CODE_ROW, CODE_COL)
+
         # Извлекаем значения с проверкой
         name = name_item.text() if name_item else ""
         code = code_item.text() if code_item else ""
@@ -129,12 +133,8 @@ class MainApp(QtWidgets.QMainWindow):
         self.project_dir = Path(__file__).parent
         self.template_file_path = self.project_dir / "шаблоны.xlsx"
 
-        # Проверяем, существует ли файл шаблонов
-        if self.template_file_path.exists():
-            self.template_df = pandas.read_excel(self.template_file_path)
-        else:
-            # Если файл не существует, создаем пустой DataFrame с нужными колонками
-            self.template_df = pandas.DataFrame(columns=["Наименование", "Код изделия", "Директория эталонов"])
+        # Загружаем данные из Excel файла
+        self.template_df = self.load_template_file()
 
         # Подключение модели
         self.table_model = PandasModel(self.template_df)
@@ -227,9 +227,8 @@ class MainApp(QtWidgets.QMainWindow):
         self.ui.image_list.clear()
 
         if not image_files:
-            # Нет изображений, информируем пользователя, но не прерываем выполнение
+            # Показываем только сообщение, без добавления текста в QListWidget
             QtWidgets.QMessageBox.information(self, "Информация", "В выбранной директории нет изображений.")
-            self.ui.image_list.addItem("Нет изображений")
             return
 
         # Если изображения есть, то добавляем их в список
