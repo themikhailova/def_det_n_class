@@ -108,7 +108,7 @@ def calculate_features(contour, image_gray, max_area, max_perimeter, max_centroi
     if len(contour) >= 5:
         ellipse = cv2.fitEllipse(contour)
         (center, axes, angle) = ellipse
-        major_axis = max(axes)
+        major_axis = max(1, max(axes))
         minor_axis = min(axes)
         features['eccentricity'] = np.sqrt(1 - (minor_axis**2 / major_axis**2))
     else:
@@ -199,5 +199,5 @@ def calculate_features(contour, image_gray, max_area, max_perimeter, max_centroi
     std_gradient = np.std(gradient_magnitude[mask == 255])
     features['mean_gradient'] = mean_gradient
     features['std_gradient'] = std_gradient
-    print(features)
+    # print(features)
     return features
