@@ -4,7 +4,7 @@ import numpy as np
 from skimage.metrics import structural_similarity as ssim
 
 
-def detect_and_highlight_anomalies(obj_img, region_size_ratio=0.05, anomaly_threshold=0.7, pixel_diff_threshold=40):
+def detect_and_highlight_anomalies(obj_img, region_size_ratio=0.2, anomaly_threshold=0.7, pixel_diff_threshold=40):
     h, w = obj_img.shape
     region_h = int(h * region_size_ratio)
     region_w = int(w * region_size_ratio)
@@ -70,32 +70,41 @@ def detect_and_highlight_anomalies(obj_img, region_size_ratio=0.05, anomaly_thre
     # cv2.waitKey(0)
     return result_img, anomalies_mask
 
-def detect_differ(obj_img, ref_img, region_size_ratio=0.05, anomaly_threshold=0.5, pixel_diff_threshold=40):
-
+def detect_differ(obj_img, ref_img, region_size_ratio=0.05, anomaly_threshold=0.7, pixel_diff_threshold=60): 
     if obj_img.shape != ref_img.shape:
         raise ValueError("Размеры изображения объекта и эталонного изображения должны совпадать")
 
     h, w = obj_img.shape
-    region_h = int(h * region_size_ratio)
-    region_w = int(w * region_size_ratio)
 
-    region_h = max(1, region_h)
-    region_w = max(1, region_w)
+    # Устанавливаем минимальный и максимальный размер регионов
+    region_h = max(7, int(h * region_size_ratio))
+    region_w = max(7, int(w * region_size_ratio))
 
     result_img = cv2.cvtColor(obj_img, cv2.COLOR_GRAY2BGR) 
     anomalies_mask = np.zeros_like(obj_img, dtype=np.uint8)
 
     for y in range(0, h, region_h):
-        for x in range(0, w, region_w):         
-            obj_region = obj_img[y:y+region_h, x:x+region_w]
-            ref_region = ref_img[y:y+region_h, x:x+region_w]
+        for x in range(0, w, region_w):
+            # Ограничиваем регионы, чтобы они не выходили за границы изображения
+            y_end = min(y + region_h, h)
+            x_end = min(x + region_w, w)
 
-            if obj_region.shape == ref_region.shape and obj_region.size > 0:
-                score, _ = ssim(obj_region, ref_region, full=True)
-                if score < anomaly_threshold:
-                    diff = cv2.absdiff(obj_region, ref_region)
-                    _, binary_diff = cv2.threshold(diff, pixel_diff_threshold, 255, cv2.THRESH_BINARY)
-                    anomalies_mask[y:y+region_h, x:x+region_w] = binary_diff
+            obj_region = obj_img[y:y_end, x:x_end]
+            ref_region = ref_img[y:y_end, x:x_end]
+
+            # Проверяем, что регионы соответствуют минимальным требованиям для SSIM
+            if obj_region.shape == ref_region.shape and min(obj_region.shape) >= 7:
+                try:
+                    # Устанавливаем win_size в зависимости от размера региона
+                    win_size = min(7, min(obj_region.shape))
+                    score, _ = ssim(obj_region, ref_region, full=True, win_size=win_size)
+                    if score < anomaly_threshold:
+                        diff = cv2.absdiff(obj_region, ref_region)
+                        _, binary_diff = cv2.threshold(diff, pixel_diff_threshold, 255, cv2.THRESH_BINARY)
+                        anomalies_mask[y:y_end, x:x_end] = binary_diff
+                except ValueError as e:
+                    print(f"Ошибка SSIM в регионе ({y}, {x}): {e}")
+                    continue
 
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (27, 27))
     anomalies_mask2 = cv2.morphologyEx(anomalies_mask, cv2.MORPH_CLOSE, kernel)
