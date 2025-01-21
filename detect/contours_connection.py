@@ -52,17 +52,20 @@ def calculate_min_distance(contour1, contour2):
         return np.min(distances)
 
 def connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid, 
-                     intensity_threshold=10, concavity_threshold=10, complexity_threshold=0.3, entropy_threshold=10, std_intensity_threshold=7,num_nearest=5, min_dist=15):
+                     intensity_threshold=25, concavity_threshold=10, complexity_threshold=0.3, entropy_threshold=5, std_intensity_threshold=5,num_nearest=5, min_dist=15,
+                     centroid_threshol=45, min_intensivity_threshol=35, max_intensity_threshol=55, mean_gradien_threshol=35, std_gradient_threshol=25):
     i = 0
     dict_cont = []
     input_gray_copy = input_gray.copy()
     # собираем список словарей, включающий в себя контур, его характеристики и флаг использования
     for contour in contours:
-        if cv2.contourArea(contour) < 20:
+        if cv2.contourArea(contour) < 15:
             continue
-        if len(contour) < 5:
-            continue
+        # if len(contour) < 5:
+        #     continue
         features = calculate_features(contour, input_gray, max_area, max_perimeter, max_centroid)
+        # if features['relative_area'] > 0.05:
+        #     continue
         dict_cont.append({'num': i, 'features': features, 'contour': contour, 'used': False})  
         i += 1
 
@@ -98,24 +101,34 @@ def connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid
             
             # проверяем минимальное расстояние
             if distance < min_dist:
-                # diff_intensity = abs(contour_info['features']['mean_intensity'] - other_contour_info['features']['mean_intensity'])
-                # diff_concavity = abs(contour_info['features']['concavity'] - other_contour_info['features']['concavity'])
-                # diff_complexity = abs(contour_info['features']['complexity'] - other_contour_info['features']['complexity'])
                 diff_intensity = abs(contour_info['features']['mean_intensity'] - other_contour_info['features']['mean_intensity'])
-                diff_entropy = abs(contour_info['features']['entropy'] - other_contour_info['features']['entropy'])
-                diff_std_intensity = abs(contour_info['features']['std_intensity'] - other_contour_info['features']['std_intensity'])
+                # diff_entropy = abs(contour_info['features']['entropy'] - other_contour_info['features']['entropy'])
+                # diff_std_intensity = abs(contour_info['features']['std_intensity'] - other_contour_info['features']['std_intensity'])
+
+                diff_centroid = abs(float(contour_info['features']['relative_centroid_distance']) - float(other_contour_info['features']['relative_centroid_distance']))
+                diff_min_intensivity = abs(float(contour_info['features']['min_intensity']) - float(other_contour_info['features']['min_intensity']))
+                diff_max_intensity = abs(float(contour_info['features']['max_intensity']) - float(other_contour_info['features']['max_intensity']))
+                diff_mean_gradient = abs(float(contour_info['features']['mean_gradient']) - float(other_contour_info['features']['mean_gradient']))
+                diff_std_gradient = abs(float(contour_info['features']['std_gradient']) - float(other_contour_info['features']['std_gradient']))
                 # если разница не превосходит установленный порог 
                 if (diff_intensity < intensity_threshold and 
-                    diff_entropy < entropy_threshold and 
-                    diff_std_intensity < std_intensity_threshold):
+                    # diff_entropy < entropy_threshold and 
+                    # diff_std_intensity < std_intensity_threshold and 
+                        diff_centroid < centroid_threshol and 
+                        diff_min_intensivity < min_intensivity_threshol and 
+                        # diff_max_intensity < max_intensity_threshol and 
+                        diff_mean_gradient < mean_gradien_threshol and 
+                        diff_std_gradient < std_gradient_threshol):
+                        # print('contour_info: ', contour_info['features'])
+                        # print('other_contour_info: ',  other_contour_info['features'])
                     # если это контур еще не был ни с кем объединен
-                    if other_contour_info['used'] == False:         
-                        # объединяем сначала оба массива точек в один, потом обводим минимальным выпуклым контуром               
-                        merged_contour = merge_contours(merged_contour, other_contour_info['contour'])
-                        
-                        cv2.drawContours(input_gray_copy, [merged_contour], -1, (0, 0, 255), 2)
-                        other_contour_info['used'] = True
-                        used_indices.add(other_contour_info['num'])
+                        if other_contour_info['used'] == False:         
+                            # объединяем сначала оба массива точек в один, потом обводим минимальным выпуклым контуром               
+                            merged_contour = merge_contours(merged_contour, other_contour_info['contour'])
+                            
+                            cv2.drawContours(input_gray_copy, [merged_contour], -1, (0, 0, 255), 2)
+                            other_contour_info['used'] = True
+                            used_indices.add(other_contour_info['num'])
         merged_contours.append(merged_contour)
         used_indices.add(idx)
         
@@ -126,9 +139,11 @@ def connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid
         # Если контур не был объединен, добавляем его в итоговый список
         # if idx not in used_indices:
         #     merged_contours.append(contour_info['contour'])
-    
-    cv2.imshow('adsf', input_gray_copy)
-    cv2.waitKey(0)
+    print('2')
+    # cv2.imshow('adsf', input_gray_copy)
+    # cv2.waitKey(0)
+    cv2.imwrite('./connectn.jpg', input_gray_copy)
+    print('3')
     # Возвращаем объединенные контуры
     return merged_contours if merged_contours else contours
 
@@ -289,7 +304,7 @@ def is_contour_within_bounding_rect(outer_contour, inner_contour):
             x_inner + w_inner <= x_outer + w_outer and 
             y_inner + h_inner <= y_outer + h_outer)    
 
-def remove_nested_contours(contours, input_gray, max_area, max_perimeter, max_centroid, intensity_threshold=50, entropy_threshold=50, std_intensity_threshold=20):
+def remove_nested_contours(contours, input_gray, max_area, max_perimeter, max_centroid, intensity_threshold=50, min_intensivity_threshol=20, max_intensity_threshol=20):
     contours_to_remove = set()  # Множество контуров для удаления
 
     for i, outer_contour in enumerate(contours):
@@ -312,12 +327,14 @@ def remove_nested_contours(contours, input_gray, max_area, max_perimeter, max_ce
                 diff_intensity = abs(features1['mean_intensity'] - features2['mean_intensity'])
                 diff_entropy = abs(features1['entropy'] - features2['entropy'])
                 diff_std_intensity = abs(features1['std_intensity'] - features2['std_intensity'])
+                diff_min_intensivity = abs(float(features1['min_intensity']) - float(features2['min_intensity']))
+                diff_max_intensity = abs(float(features1['max_intensity']) - float(features2['max_intensity']))
                 # если разница между средней яркостью, вокнутостью и сложностью контуров не превосходит установленный порог 
-                if (diff_intensity < intensity_threshold and 
-                    diff_entropy < entropy_threshold and 
-                    diff_std_intensity < std_intensity_threshold):
-                    outer_contour = merge_contours(outer_contour, inner_contour)
-                    contours_to_remove.add(j)  # Добавляем индекс вложенного контура
+                # if (diff_intensity < intensity_threshold and 
+                #     diff_min_intensivity < min_intensivity_threshol and 
+                #     diff_max_intensity < max_intensity_threshol):
+                outer_contour = merge_contours(outer_contour, inner_contour)
+                contours_to_remove.add(j)  # Добавляем индекс вложенного контура
                 # elif (diff_area > 40):
                 #     outer_contour = merge_contours(outer_contour, inner_contour)
                 #     contours_to_remove.add(j)
