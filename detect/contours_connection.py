@@ -61,8 +61,7 @@ def connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid
     for contour in contours:
         if cv2.contourArea(contour) < 15:
             continue
-        # if len(contour) < 5:
-        #     continue
+
         features = calculate_features(contour, input_gray, max_area, max_perimeter, max_centroid)
         if features['mean_intensity'] < 40:
             continue
@@ -102,26 +101,18 @@ def connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid
             # проверяем минимальное расстояние
             if distance < min_dist:
                 diff_intensity = abs(contour_info['features']['mean_intensity'] - other_contour_info['features']['mean_intensity'])
-                # diff_entropy = abs(contour_info['features']['entropy'] - other_contour_info['features']['entropy'])
-                # diff_std_intensity = abs(contour_info['features']['std_intensity'] - other_contour_info['features']['std_intensity'])
-
                 diff_centroid = abs(float(contour_info['features']['relative_centroid_distance']) - float(other_contour_info['features']['relative_centroid_distance']))
                 diff_min_intensivity = abs(float(contour_info['features']['min_intensity']) - float(other_contour_info['features']['min_intensity']))
-                diff_max_intensity = abs(float(contour_info['features']['max_intensity']) - float(other_contour_info['features']['max_intensity']))
                 diff_mean_gradient = abs(float(contour_info['features']['mean_gradient']) - float(other_contour_info['features']['mean_gradient']))
                 diff_std_gradient = abs(float(contour_info['features']['std_gradient']) - float(other_contour_info['features']['std_gradient']))
                 # если разница не превосходит установленный порог 
                 if (diff_intensity < intensity_threshold and 
-                    # diff_entropy < entropy_threshold and 
-                    # diff_std_intensity < std_intensity_threshold and 
                         diff_centroid < centroid_threshol and 
                         diff_min_intensivity < min_intensivity_threshol and 
-                        # diff_max_intensity < max_intensity_threshol and 
                         diff_mean_gradient < mean_gradien_threshol and 
                         diff_std_gradient < std_gradient_threshol):
-                        # print('contour_info: ', contour_info['features'])
-                        # print('other_contour_info: ',  other_contour_info['features'])
-                    # если это контур еще не был ни с кем объединен
+                        
+                        # если это контур еще не был ни с кем объединен
                         if other_contour_info['used'] == False:         
                             # объединяем сначала оба массива точек в один, потом обводим минимальным выпуклым контуром               
                             merged_contour = merge_contours(merged_contour, other_contour_info['contour'])
@@ -132,18 +123,6 @@ def connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid
         merged_contours.append(merged_contour)
         used_indices.add(idx)
         
-                        
-                # else:
-                #     merged_contours.append(contour_info['contour'])
-                
-        # Если контур не был объединен, добавляем его в итоговый список
-        # if idx not in used_indices:
-        #     merged_contours.append(contour_info['contour'])
-    print('2')
-    # cv2.imshow('adsf', input_gray_copy)
-    # cv2.waitKey(0)
-    cv2.imwrite('./connectn.jpg', input_gray_copy)
-    print('3')
     # Возвращаем объединенные контуры
     return merged_contours if merged_contours else contours
 
@@ -195,9 +174,6 @@ def merge_overlapping_contours(contours, input_gray, max_area, max_perimeter, ma
 
                 if rectangles_intersect(rect1, rect2):
                     diff_intensity = abs(features1['mean_intensity'] - features2['mean_intensity'])
-                    # diff_entropy = abs(features1['entropy'] - features2['entropy'])
-                    # diff_std_intensity = abs(features1['std_intensity'] - features2['std_intensity'])
-
                     diff_centroid = abs(float(features1['relative_centroid_distance']) - float(features2['relative_centroid_distance']))
                     diff_min_intensivity = abs(float(features1['min_intensity']) - float(features2['min_intensity']))
                     diff_max_intensity = abs(float(features1['max_intensity']) - float(features2['max_intensity']))
@@ -205,8 +181,6 @@ def merge_overlapping_contours(contours, input_gray, max_area, max_perimeter, ma
                     diff_std_gradient = abs(float(features1['std_gradient']) - float(features2['std_gradient']))
                     # если разница не превосходит установленный порог 
                     if (diff_intensity < intensity_threshold and 
-                        # diff_entropy < entropy_threshold and 
-                        # diff_std_intensity < std_intensity_threshold and 
                         diff_centroid < centroid_threshol and 
                         diff_min_intensivity < min_intensivity_threshol and 
                         diff_max_intensity < max_intensity_threshol and 
@@ -225,144 +199,6 @@ def merge_overlapping_contours(contours, input_gray, max_area, max_perimeter, ma
 
     return contours
 
-
-def are_contours_intersecting(contour1, contour2):
-    """
-    Проверяет, пересекаются ли два контура contour1 и contour2.
-    
-    :param contour1: Контур первого объекта.
-    :param contour2: Контур второго объекта.
-    :return: True, если контуры пересекаются; False в противном случае.
-    """
-    # Проверка на пересечения контуров
-    intersection = cv2.intersectConvexConvex(contour1, contour2)
-    print(intersection[0] )
-    if intersection[0] > 0:  # Если площадь пересечения больше нуля, значит пересекаются
-        return True
-    return False
-
-# def get_ellipse_params(contour):
-#     """ 
-#     Получает параметры эллипса, описывающего контур. 
-#     """
-#     (x, y), (MA, ma), angle = cv2.fitEllipse(contour)
-#     return (x, y), MA / 2, ma / 2, angle 
-
-# def are_ellipses_intersecting(ellipse1, ellipse2):
-#     """ 
-#     Проверяет, пересекаются ли два эллипса. 
-#     """
-#     center1, axes11, axes12, angle1 = ellipse1
-#     center2, axes21, axes22, angle2 = ellipse2
-    
-#     # Генерируем точки по эллипсам
-#     points1 = cv2.ellipse2Poly((int(center1[0]), int(center1[1])), (int(axes11), int(axes12)), int(angle1), 0, 360, 1)
-#     points2 = cv2.ellipse2Poly((int(center2[0]), int(center2[1])), (int(axes21), int(axes22)), int(angle2), 0, 360, 1)
-    
-#     # Проверяем пересечение
-#     return cv2.intersectConvexConvex(points1, points2)[0] > 0
-
-# def are_contours_intersecting(contour1, contour2):
-#     """ 
-#     Проверяет, пересекаются ли два контура. 
-#     """
-#     ellipse1 = get_ellipse_params(contour1)
-#     ellipse2 = get_ellipse_params(contour2)
-    
-#     return are_ellipses_intersecting(ellipse1, ellipse2)
-
-def union_contours(contours, input_gray, max_area, max_perimeter, max_centroid):
-    """
-    
-    :param contours: Список контуров
-    :return: Список контуров
-    """
-    merged_contours = []
-    used_indices = set()  # Множество для хранения индексов удаленных контуров
-    input_gray_copy = input_gray.copy()
-    for i, outer_contour in enumerate(contours):
-        if i in used_indices:  # Пропускаем контуры, которые уже были объединены
-            continue
-        
-        merged_contour = outer_contour  # Начинаем с текущего внешнего контура
-        for j, inner_contour in enumerate(contours):
-            if i != j and are_contours_intersecting(outer_contour, inner_contour):
-                features1 = calculate_features(outer_contour, input_gray, max_area, max_perimeter, max_centroid)
-                features2 = calculate_features(inner_contour, input_gray, max_area, max_perimeter, max_centroid)
-                diff_intensity = abs(features1['mean_intensity'] - features2['mean_intensity'])
-                diff_concavity = abs(features1['concavity'] - features2['concavity'])
-                diff_complexity = abs(features1['complexity'] - features2['complexity'])
-
-                if (diff_intensity < 30 and 
-                    diff_concavity < 20 and 
-                    diff_complexity < 20):
-                    # merged_contour = cv2.convexHull(np.vstack((merged_contour, inner_contour)))
-                    merged_contour = merge_contours(outer_contour, inner_contour)
-                    used_indices.add(j)  # Помечаем внутренний контур как использованный
-        merged_contours.append(merged_contour)
-                
-           
-            
-        # else:
-        #     merged_contours.append(merged_contour)
-             # Добавляем объединенный контур, если он был изменен
-    cv2.drawContours(input_gray_copy, [merged_contour], -1, (0, 0, 0), 2)
-        # used_indices.add(i)
-    print('merged_contour: ',len(merged_contours))
-    cv2.imshow('adsf', input_gray_copy)
-    cv2.waitKey(0)   
-    
-    
-    # Добавляем только те контуры, которые не были объединены
-    # remaining_contours = [contour for i, contour in enumerate(contours) if i not in used_indices]
-    # print(len(contours))
-    # print(len(merged_contours) + len(remaining_contours))
-    print('used_indices: ', len(used_indices))
-    if len(contours)!=len(merged_contours) :
-        flag = True
-    else:
-        flag = False
-    return merged_contours, flag
-
-def is_contour_inside(outer_contour, inner_contour):
-    """
-    Проверяет, является ли контур inner_contour вложенным в контур outer_contour.
-    
-    :param outer_contour: Контур внешнего объекта (больший контур)
-    :param inner_contour: Контур внутреннего объекта (меньший контур)
-    :return: True, если контур inner_contour полностью вложен в outer_contour; False в противном случае.
-    """
-    for point in inner_contour:
-        x, y = int(point[0][0]), int(point[0][1])  # Точка в контуре — это массив вида [x, y]            
-        if cv2.pointPolygonTest(outer_contour, (x, y), False) < 0:
-            return False  # Если хотя бы одна точка не внутри, возвращаем False
-    return True  # Если все точки внутри, возвращаем True
-
-def increase_ellipse(ellipse, scale_factor=1.3):
-    center, axes, angle = ellipse
-    major_axis, minor_axis = axes
-
-    new_major_axis = major_axis * scale_factor
-    new_minor_axis = minor_axis * scale_factor
-
-    return (center, (new_major_axis, new_minor_axis), angle)
-
-def is_contour_inside_ellipse(outer_contour, inner_contour):
-    # Получаем параметры эллипса
-    (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(outer_contour)
-
-    # Проверяем, что все точки внутреннего контура находятся внутри эллипса
-    for point in inner_contour:
-        point = point[0]  # Преобразуем в нужный формат
-        # Преобразуем координаты точки относительно центра эллипса
-        normalized_x = (point[0] - x) * np.cos(np.radians(angle)) + (point[1] - y) * np.sin(np.radians(angle))
-        normalized_y = -(point[0] - x) * np.sin(np.radians(angle)) + (point[1] - y) * np.cos(np.radians(angle))
-
-        # Проверяем, попадает ли точка в уравнение эллипса
-        if (normalized_x ** 2) / (major_axis / 2) ** 2 + (normalized_y ** 2) / (minor_axis / 2) ** 2 > 1:
-            return False  # Точка вне эллипса
-
-    return True  # Все точки внутри эллипса
 def is_contour_within_bounding_rect(outer_contour, inner_contour):
     """
     Проверяет, находится ли меньший контур в рамках ограничивающего прямоугольника большого контура.
