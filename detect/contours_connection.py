@@ -64,8 +64,8 @@ def connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid
         # if len(contour) < 5:
         #     continue
         features = calculate_features(contour, input_gray, max_area, max_perimeter, max_centroid)
-        # if features['relative_area'] > 0.05:
-        #     continue
+        if features['mean_intensity'] < 40:
+            continue
         dict_cont.append({'num': i, 'features': features, 'contour': contour, 'used': False})  
         i += 1
 
@@ -146,6 +146,85 @@ def connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid
     print('3')
     # Возвращаем объединенные контуры
     return merged_contours if merged_contours else contours
+
+def merge_overlapping_contours(contours, input_gray, max_area, max_perimeter, max_centroid, intensity_threshold=55, centroid_threshol=35, min_intensivity_threshol=35, 
+                               max_intensity_threshol=35, mean_gradien_threshol=15, std_gradient_threshol=35):
+    """
+    Объединяет пересекающиеся контуры, если их ограничивающие прямоугольники пересекаются хотя бы в двух точках.
+
+    :param contours: Список контуров (каждый контур - массив точек np.array с формой (N, 1, 2))
+    :return: Список объединённых контуров
+    """
+    def rectangles_intersect(rect1, rect2):
+        """
+        Проверяет, пересекаются ли два прямоугольника в хотя бы двух точках.
+
+        :param rect1: Первый прямоугольник (x, y, w, h)
+        :param rect2: Второй прямоугольник (x, y, w, h)
+        :return: True, если пересекаются, иначе False
+        """
+        x1, y1, w1, h1 = rect1
+        x2, y2, w2, h2 = rect2
+
+        # Проверяем пересечение областей
+        overlap_x = max(0, min(x1 + w1, x2 + w2) - max(x1, x2))
+        overlap_y = max(0, min(y1 + h1, y2 + h2) - max(y1, y2)) 
+
+        return overlap_x > 0 and overlap_y > 0
+
+    merged = True
+    while merged:
+        merged = False
+        new_contours = []
+        used = [False] * len(contours)
+
+        for i, contour1 in enumerate(contours):
+            if used[i]:
+                continue
+            features1 = calculate_features(contour1, input_gray, max_area, max_perimeter, max_centroid)
+            # Получаем ограничивающий прямоугольник для первого контура
+            rect1 = cv2.boundingRect(contour1)
+            combined_contour = contour1
+
+            for j, contour2 in enumerate(contours):
+                if i == j or used[j]:
+                    continue
+                features2 = calculate_features(contour2, input_gray, max_area, max_perimeter, max_centroid)
+                # Получаем ограничивающий прямоугольник для второго контура
+                rect2 = cv2.boundingRect(contour2)
+
+                if rectangles_intersect(rect1, rect2):
+                    diff_intensity = abs(features1['mean_intensity'] - features2['mean_intensity'])
+                    # diff_entropy = abs(features1['entropy'] - features2['entropy'])
+                    # diff_std_intensity = abs(features1['std_intensity'] - features2['std_intensity'])
+
+                    diff_centroid = abs(float(features1['relative_centroid_distance']) - float(features2['relative_centroid_distance']))
+                    diff_min_intensivity = abs(float(features1['min_intensity']) - float(features2['min_intensity']))
+                    diff_max_intensity = abs(float(features1['max_intensity']) - float(features2['max_intensity']))
+                    diff_mean_gradient = abs(float(features1['mean_gradient']) - float(features2['mean_gradient']))
+                    diff_std_gradient = abs(float(features1['std_gradient']) - float(features2['std_gradient']))
+                    # если разница не превосходит установленный порог 
+                    if (diff_intensity < intensity_threshold and 
+                        # diff_entropy < entropy_threshold and 
+                        # diff_std_intensity < std_intensity_threshold and 
+                        diff_centroid < centroid_threshol and 
+                        diff_min_intensivity < min_intensivity_threshol and 
+                        diff_max_intensity < max_intensity_threshol and 
+                        diff_mean_gradient < mean_gradien_threshol and 
+                        diff_std_gradient < std_gradient_threshol):
+                        # Объединяем два контура
+                        combined_contour = np.vstack((combined_contour, contour2))
+                        rect1 = cv2.boundingRect(combined_contour)
+                        used[j] = True
+                        merged = True
+
+            used[i] = True
+            new_contours.append(combined_contour)
+
+        contours = new_contours
+
+    return contours
+
 
 def are_contours_intersecting(contour1, contour2):
     """
