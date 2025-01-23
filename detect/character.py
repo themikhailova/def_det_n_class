@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import time
-
+import os
 from features import calculate_features, save_features_to_excel
 # from classify_anomalies import classify_anomaly
 from detect_anomalies import detect_and_highlight_anomalies, detect_differ
@@ -172,10 +172,33 @@ def remove_back_and_detect(img_path, reference_path, output_folder):
 
     res_msec = (finish - start) * 1000
     print('Время работы в миллисекундах: ', res_msec)
-   
 
-img_path = r'./def52.jpg'
-reference_path = r'./ref5.jpg'
-output_folder = r'./output_folder'
+def set_reference_path(reference_path):
+    """
+    Функция принимает путь к директории из main.py и выполняет заглушку
+    :param reference_path: Path - путь, переданный из главного окна
+    """
+    if reference_path:
+        print(f"Заглушка: Путь к директории успешно получен: {reference_path}")
+        reference_path2 = r'C:/ref/ref5.jpg'
+        output_folder = r'./output_folder'
+        # Цикл по всем файлам в папке
+        for file in os.listdir(reference_path):
+            # Полный путь к файлу
+            img_path = os.path.join(reference_path, file)
+            
+            # Проверяем, что это файл, а не папка
+            if os.path.isfile(img_path):
+                remove_back_and_detect(img_path, reference_path2, output_folder)
+    else:
+        print("Заглушка: Ошибка - путь к директории не передан")
 
-remove_back_and_detect(img_path, reference_path, output_folder)
+if __name__ == "__main__":
+    test_path = "/path/to/dummy_directory"
+    set_reference_path(test_path)
+
+# img_path = r'./def52.jpg'
+# reference_path = r'./ref5.jpg'
+# output_folder = r'./output_folder'
+
+# remove_back_and_detect(img_path, reference_path, output_folder)
