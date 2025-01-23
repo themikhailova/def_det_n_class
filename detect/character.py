@@ -2,21 +2,24 @@ import cv2
 import numpy as np
 import time
 import os
-from features import calculate_features, save_features_to_excel
-# from classify_anomalies import classify_anomaly
-from detect_anomalies import detect_and_highlight_anomalies, detect_differ
-from contours_connection import connect_contours, remove_nested_contours, merge_overlapping_contours
-from det_aligning import align
-from backremoveCV import remover
 
+# from classify_anomalies import classify_anomaly
+import sys
+sys.path.append(os.path.abspath('./detect'))
+from detect.features import calculate_features, save_features_to_excel
+from detect.detect_anomalies import detect_and_highlight_anomalies, detect_differ
+from detect.contours_connection import connect_contours, remove_nested_contours, merge_overlapping_contours
+sys.path.append(os.path.abspath('./preprocess'))
+from preprocess.backremoveCV import remover
+from preprocess.prep_metal import preprocess_metal_image
 
 def resize_and_align_reference(input_image, reference_image):
-    """
+    '''
     "Вырезает" деталь из reference_image по наибольшему контуру, создает черный фон по размерам input_image и вставляет вырезанную деталь в соответствующее место.
     :param input_image: Входное изображение, к размеру которого нужно привести reference_image.
     :param reference_image: Эталонное изображение, которое нужно масштабировать и привести к размеру input_image.
     :return: Преобразованное reference_image.
-    """
+    '''
     # Преобразуем изображения в оттенки серого
     input_gray = cv2.cvtColor(input_image, cv2.COLOR_BGR2GRAY)
     reference_gray = cv2.cvtColor(reference_image, cv2.COLOR_BGR2GRAY)
@@ -51,15 +54,13 @@ def resize_and_align_reference(input_image, reference_image):
     return aligned_reference
 
 def detect_and_save_anomalies(input_image, reference_image, output_folder, threshold=50, region_size=0.05, min_anomaly_size=20, dilate_iter=5):
-    """
+    '''
     Основной алгоритм обнаружения аномалий и их сохранения в виде отдельных изображений.
-    """  
+    '''  
     # Приведение reference_image к input_image
     reference_image = resize_and_align_reference(input_image, reference_image)
-    # cv2.imshow('input_image', input_image)
-    # cv2.imshow('reference_image', reference_image)
-    # cv2.waitKey(0)
-    input_gray = cv2.cvtColor(input_image, cv2.COLOR_BGR2GRAY)
+
+    input_gray =  preprocess_metal_image(input_image)
     contours_max, _ = cv2.findContours(input_gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     # наибольший контур по площади
@@ -78,39 +79,27 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
         else:
             max_centroid = (0, 0)  # если момент равен нулю (неправильный контур)
 
-        reference_gray = cv2.cvtColor(reference_image, cv2.COLOR_BGR2GRAY)
+        reference_gray = preprocess_metal_image(reference_image)
         reference_gray2 = cv2.GaussianBlur(reference_gray, (7, 7), 0)
         input_gray2 = cv2.GaussianBlur(input_gray, (7, 7), 0) 
     
-        cv2.imwrite('./input_gray.jpg', input_gray)
         _, detailed_mask = detect_and_highlight_anomalies(input_gray, pixel_diff_threshold=60)
         kernel = np.ones((2, 2), np.uint8)
         detailed_mask = cv2.dilate(detailed_mask, kernel, iterations=1)
-        cv2.imwrite('./detailed_mask.jpg', detailed_mask)
      
         _, mask_ref = detect_and_highlight_anomalies(reference_gray, pixel_diff_threshold=60)
-        cv2.imwrite('./mask_ref.jpg', mask_ref)
         mask_ref = cv2.bitwise_not(mask_ref)
-
-        cv2.imwrite('./bitwise_not_mask_ref.jpg', mask_ref)
-
         
         detailed_mask_combined = cv2.bitwise_and(detailed_mask, mask_ref)
-        cv2.imwrite('./detailed_mask_combined.jpg', detailed_mask_combined)
         
         _, differ = detect_differ(input_gray2, reference_gray2, region_size_ratio=0.05)
-        cv2.imwrite('./differ.jpg', differ)
-        combined_anomalies = cv2.bitwise_or(detailed_mask_combined, differ)
-        combined_anomalies = cv2.bitwise_and(combined_anomalies, mask_ref)
+        combined_anomalies = cv2.bitwise_and(cv2.bitwise_or(detailed_mask_combined, differ), mask_ref)
         
-        cv2.imwrite('./combined_anomalies.jpg', combined_anomalies)
         contours, _ = cv2.findContours(combined_anomalies, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
        
+        contours = connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid, min_dist=5)
+
         contours_new = []
-         
-        contours = connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid, min_dist=5)
-        contours = connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid, min_dist=5)
-       
         all_cont_ing = input_image.copy()
         for contour in contours:
             
@@ -120,17 +109,15 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
             
             features_remove = calculate_features(contour, input_gray, max_area, max_perimeter, max_centroid)
             # save_features_to_excel(features_remove, './spam/anomalies.xlsx')
-            # features_remove['relative_area'] < 0.05 and 
             
             if features_remove['relative_area'] < 0.0186:
                 print(features_remove['relative_area'], features_remove['mean_intensity'])
                 contours_new.append(contour)
         cv2.imwrite('./all_cont_ing.jpg', all_cont_ing)
         
-        contours = contours_new
         contours = merge_overlapping_contours(contours, input_gray, max_area, max_perimeter, max_centroid)
-        contours = connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid, min_dist=5)
         contours = remove_nested_contours(contours, input_gray, max_area, max_perimeter, max_centroid)
+
         test = input_image.copy()
         anomaly_index = 0
         for contour in contours:
@@ -152,19 +139,15 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
             cv2.rectangle(test, (x, y), (x + w, y + h), colour, 2) 
             anomaly_filename = f"{output_folder}/anomaly_{anomaly_index}.png"
             cv2.imwrite(anomaly_filename, output_image)
-
+            
             anomaly_index += 1
          
         cv2.imwrite('./test.jpg', test)
 
-
 def remove_back_and_detect(img_path, reference_path, output_folder):
     
     input_image = remover(cv2.imread(img_path))
-    cv2.imwrite('./input_image1.jpg', input_image)
-
     reference_image = remover(cv2.imread(reference_path))
-    cv2.imwrite('./reference_image.jpg', reference_image)
 
     start = time.time()
     detect_and_save_anomalies(input_image, reference_image, output_folder)
@@ -173,29 +156,33 @@ def remove_back_and_detect(img_path, reference_path, output_folder):
     res_msec = (finish - start) * 1000
     print('Время работы в миллисекундах: ', res_msec)
 
-def set_reference_path(reference_path):
-    """
+def set_reference_path(reference_path, template_directory):
+    '''
     Функция принимает путь к директории из main.py и выполняет заглушку
     :param reference_path: Path - путь, переданный из главного окна
-    """
+    '''
     if reference_path:
         print(f"Заглушка: Путь к директории успешно получен: {reference_path}")
-        reference_path2 = r'C:/ref/ref5.jpg'
+        print(f"Директория шаблона: {template_directory}")
+        # reference_path2 = r'C:/ref/ref5.jpg'
         output_folder = r'./output_folder'
         # Цикл по всем файлам в папке
         for file in os.listdir(reference_path):
             # Полный путь к файлу
             img_path = os.path.join(reference_path, file)
-            
             # Проверяем, что это файл, а не папка
+
             if os.path.isfile(img_path):
-                remove_back_and_detect(img_path, reference_path2, output_folder)
+                for temp_file in os.listdir(template_directory):
+                    ref_path = os.path.join(template_directory, temp_file)
+                    if os.path.isfile(ref_path):
+                        remove_back_and_detect(img_path, ref_path, output_folder)
     else:
         print("Заглушка: Ошибка - путь к директории не передан")
 
-if __name__ == "__main__":
-    test_path = "/path/to/dummy_directory"
-    set_reference_path(test_path)
+# if __name__ == "__main__":
+#     test_path = "/path/to/dummy_directory"
+#     set_reference_path(test_path)
 
 # img_path = r'./def52.jpg'
 # reference_path = r'./ref5.jpg'
