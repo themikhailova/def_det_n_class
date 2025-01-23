@@ -1,10 +1,9 @@
 import cv2
 import numpy as np
 from scipy.spatial.distance import cdist
-
-from features import calculate_features
-
-from shapely.geometry import Polygon, GeometryCollection
+import sys, os
+sys.path.append(os.path.abspath('./detect'))
+from detect.features import calculate_features
 
 def find_nearest_points(contour1, contour2):
     # Преобразуем контуры в двумерные массивы точек
@@ -126,78 +125,49 @@ def connect_contours(contours, input_gray, max_area, max_perimeter, max_centroid
     # Возвращаем объединенные контуры
     return merged_contours if merged_contours else contours
 
-def merge_overlapping_contours(contours, input_gray, max_area, max_perimeter, max_centroid, intensity_threshold=55, centroid_threshol=35, min_intensivity_threshol=35, 
-                               max_intensity_threshol=35, mean_gradien_threshol=15, std_gradient_threshol=35):
-    """
-    Объединяет пересекающиеся контуры, если их ограничивающие прямоугольники пересекаются хотя бы в двух точках.
+def merge_overlapping_contours(contours, input_gray, max_area, max_perimeter, max_centroid, intensity_threshold=55, centroid_threshol=35, min_intensivity_threshol=35, max_intensity_threshol=35, mean_gradien_threshol=15, std_gradient_threshol=35):
+    import networkx as nx
 
-    :param contours: Список контуров (каждый контур - массив точек np.array с формой (N, 1, 2))
-    :return: Список объединённых контуров
-    """
     def rectangles_intersect(rect1, rect2):
-        """
-        Проверяет, пересекаются ли два прямоугольника в хотя бы двух точках.
-
-        :param rect1: Первый прямоугольник (x, y, w, h)
-        :param rect2: Второй прямоугольник (x, y, w, h)
-        :return: True, если пересекаются, иначе False
-        """
         x1, y1, w1, h1 = rect1
         x2, y2, w2, h2 = rect2
+        return not (x1 + w1 <= x2 or x2 + w2 <= x1 or y1 + h1 <= y2 or y2 + h2 <= y1)
 
-        # Проверяем пересечение областей
-        overlap_x = max(0, min(x1 + w1, x2 + w2) - max(x1, x2))
-        overlap_y = max(0, min(y1 + h1, y2 + h2) - max(y1, y2)) 
+    # Вычисляем boundingRect и признаки для всех контуров
+    bounding_boxes = [cv2.boundingRect(contour) for contour in contours]
+    features = [calculate_features(contour, input_gray, max_area, max_perimeter, max_centroid) for contour in contours]
 
-        return overlap_x > 0 and overlap_y > 0
+    # Строим граф
+    G = nx.Graph()
+    G.add_nodes_from(range(len(contours)))
 
-    merged = True
-    while merged:
-        merged = False
-        new_contours = []
-        used = [False] * len(contours)
-
-        for i, contour1 in enumerate(contours):
-            if used[i]:
-                continue
-            features1 = calculate_features(contour1, input_gray, max_area, max_perimeter, max_centroid)
-            # Получаем ограничивающий прямоугольник для первого контура
-            rect1 = cv2.boundingRect(contour1)
-            combined_contour = contour1
-
-            for j, contour2 in enumerate(contours):
-                if i == j or used[j]:
-                    continue
-                features2 = calculate_features(contour2, input_gray, max_area, max_perimeter, max_centroid)
-                # Получаем ограничивающий прямоугольник для второго контура
-                rect2 = cv2.boundingRect(contour2)
-
-                if rectangles_intersect(rect1, rect2):
-                    diff_intensity = abs(features1['mean_intensity'] - features2['mean_intensity'])
-                    diff_centroid = abs(float(features1['relative_centroid_distance']) - float(features2['relative_centroid_distance']))
-                    diff_min_intensivity = abs(float(features1['min_intensity']) - float(features2['min_intensity']))
-                    diff_max_intensity = abs(float(features1['max_intensity']) - float(features2['max_intensity']))
-                    diff_mean_gradient = abs(float(features1['mean_gradient']) - float(features2['mean_gradient']))
-                    diff_std_gradient = abs(float(features1['std_gradient']) - float(features2['std_gradient']))
+    for i, rect1 in enumerate(bounding_boxes):
+        for j, rect2 in enumerate(bounding_boxes[i + 1:], start=i + 1):
+            if rectangles_intersect(rect1, rect2):
+                diff_intensity = abs(features[i]['mean_intensity'] - features[j]['mean_intensity'])
+                diff_centroid = abs(float(features[i]['relative_centroid_distance']) - float(features[j]['relative_centroid_distance']))
+                diff_min_intensivity = abs(float(features[i]['min_intensity']) - float(features[j]['min_intensity']))
+                diff_max_intensity = abs(float(features[i]['max_intensity']) - float(features[j]['max_intensity']))
+                diff_mean_gradient = abs(float(features[i]['mean_gradient']) - float(features[j]['mean_gradient']))
+                diff_std_gradient = abs(float(features[i]['std_gradient']) - float(features[j]['std_gradient']))
                     # если разница не превосходит установленный порог 
-                    if (diff_intensity < intensity_threshold and 
+                if (diff_intensity < intensity_threshold and 
                         diff_centroid < centroid_threshol and 
                         diff_min_intensivity < min_intensivity_threshol and 
                         diff_max_intensity < max_intensity_threshol and 
                         diff_mean_gradient < mean_gradien_threshol and 
                         diff_std_gradient < std_gradient_threshol):
-                        # Объединяем два контура
-                        combined_contour = np.vstack((combined_contour, contour2))
-                        rect1 = cv2.boundingRect(combined_contour)
-                        used[j] = True
-                        merged = True
+                    G.add_edge(i, j)
 
-            used[i] = True
-            new_contours.append(combined_contour)
+    # Находим компоненты связности и объединяем контуры
+    merged_contours = []
+    for component in nx.connected_components(G):
+        merged_contour = np.vstack([contours[i] for i in component])
+        merged_contours.append(merged_contour)
 
-        contours = new_contours
+    return merged_contours
 
-    return contours
+
 
 def is_contour_within_bounding_rect(outer_contour, inner_contour):
     """
