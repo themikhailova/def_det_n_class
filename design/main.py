@@ -7,6 +7,16 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 from design import Ui_MainWindow, Ui_SelectTemplateDialog
 from PyQt5.QtCore import QAbstractTableModel, Qt
 
+from character import set_reference_path  # Импортируем функцию из character.py
+
+import os
+from PyQt5.QtCore import QCoreApplication
+
+# Укажите путь к папке plugins
+os.environ['QT_PLUGIN_PATH'] = r"./venv/Lib/site-packages/PyQt5/Qt5/plugins"
+QCoreApplication.addLibraryPath(r"./venv/Lib/site-packages/PyQt5/Qt5/plugins")
+
+
 # Константа для регулярного выражения фильтрации изображений
 IMAGE_PATTERN = re.compile(r'.*\.(png|jpg|jpeg|gif|bmp)$', re.IGNORECASE)
 
@@ -131,6 +141,7 @@ class MainApp(QtWidgets.QMainWindow):
         super().__init__()
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+        self.selected_directory = None  # Переменная для хранения пути к директории
 
         # Определяем файл шаблонов
         self.project_dir = Path(__file__).parent
@@ -212,19 +223,25 @@ class MainApp(QtWidgets.QMainWindow):
         QtWidgets.QMessageBox.information(self, "Успех", "Шаблон успешно удален.")
 
     def on_set_directory_clicked(self):
-        """Установить директорию для отображения изображений"""
+        """Обработчик нажатия на кнопку 'Указать директорию'"""
         directory = QtWidgets.QFileDialog.getExistingDirectory(self, "Указать директорию", "")
         if directory:
-            self.current_directory = Path(directory)
-            self.load_images_to_view()
+            self.selected_directory = Path(directory)
+            print(f"Выбрана директория: {self.selected_directory}")
+            
+            # Передаем путь в character.py
+            set_reference_path(self.selected_directory)
+        else:
+            print("Директория не выбрана")
+
 
     def load_images_to_view(self):
         """Загружает изображения из текущей директории и отображает их в QListWidget"""
-        if not self.current_directory or not self.current_directory.exists():
+        if not self.selected_directory or not self.selected_directory.exists():
             QtWidgets.QMessageBox.warning(self, "Ошибка", "Директория не выбрана или не существует.")
             return
 
-        image_files = [file for file in self.current_directory.iterdir() if IMAGE_PATTERN.match(file.name)]
+        image_files = [file for file in self.selected_directory.iterdir() if IMAGE_PATTERN.match(file.name)]
 
         # Очищаем текущий виджет, чтобы избежать старых данных
         self.ui.image_list.clear()
