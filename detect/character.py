@@ -12,7 +12,7 @@ from detect.contours_connection import connect_contours, remove_nested_contours,
 sys.path.append(os.path.abspath('./preprocess'))
 from preprocess.backremoveCV import remover
 from preprocess.prep_metal import preprocess_metal_image
-# from preprocess.aligning import align
+from preprocess.aligning import align
 
 def resize_and_align_reference(input_image, reference_image):
     '''
@@ -139,7 +139,7 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
             cv2.rectangle(output_image, (x, y), (x + w, y + h), colour, 2) 
             cv2.rectangle(test, (x, y), (x + w, y + h), colour, 2) 
             anomaly_filename = f"{output_folder}/anomaly_{anomaly_index}.png"
-            cv2.imwrite(anomaly_filename, output_image)
+            cv2.imwrite(anomaly_filename, align(output_image))
             
             anomaly_index += 1
          
