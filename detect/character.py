@@ -165,7 +165,7 @@ def set_reference_path(reference_path, template_directory):
         print(f"Заглушка: Путь к директории успешно получен: {reference_path}")
         print(f"Директория шаблона: {template_directory}")
         # reference_path2 = r'C:/ref/ref5.jpg'
-        output_folder = r'./output_folder'
+        output_folder = r'C:/output_folder'
         # Цикл по всем файлам в папке
         for file in os.listdir(reference_path):
             # Полный путь к файлу
