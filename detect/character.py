@@ -12,7 +12,7 @@ from detect.contours_connection import connect_contours, remove_nested_contours,
 sys.path.append(os.path.abspath('./preprocess'))
 from preprocess.backremoveCV import remover
 from preprocess.prep_metal import preprocess_metal_image
-from preprocess.aligning import align
+# from preprocess.aligning import align
 
 def resize_and_align_reference(input_image, reference_image):
     '''
@@ -147,8 +147,8 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, thres
 
 def remove_back_and_detect(img_path, reference_path, output_folder):
     
-    input_image = align(remover(cv2.imread(img_path)))
-    reference_image = align(remover(cv2.imread(reference_path)))
+    input_image = remover(cv2.imread(img_path))
+    reference_image = remover(cv2.imread(reference_path))
 
     start = time.time()
     detect_and_save_anomalies(input_image, reference_image, output_folder)
