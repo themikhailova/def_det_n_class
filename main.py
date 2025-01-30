@@ -6,7 +6,7 @@ from pathlib import Path
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import QAbstractTableModel, Qt, QCoreApplication
 
-sys.path.append(os.path.abspath('./design'))
+sys.path.append(os.path.abspath('./designUI'))
 from designUI.design import Ui_MainWindow, Ui_SelectTemplateDialog
 
 sys.path.append(os.path.abspath('./detect'))
@@ -141,7 +141,8 @@ class MainApp(QtWidgets.QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.selected_directory = None  # Переменная для хранения пути к директории
-        
+        self.export_directory= None
+
         # Определяем файл шаблонов
         self.project_dir = Path(__file__).parent
         self.template_file_path = self.project_dir / "шаблоны.xlsx"
@@ -159,10 +160,12 @@ class MainApp(QtWidgets.QMainWindow):
         self.ui.delete_template.clicked.connect(self.on_delete_template_clicked)
         self.ui.set_directory.clicked.connect(self.on_set_directory_clicked)
         # self.ui.analysis.clicked.connect(self.on_run_analysis_clicked)
-        
+        self.ui.statistics.clicked.connect(self.on_export_clicked)
+        self.ui.edit.clicked.connect(self.on_edit_clicked)
+
         # Папка с результатами анализа
         self.output_folder = "C:/output_folder/"
-
+        self.excel_path = "./anomalies.xlsx"
         # Таймер для проверки новых файлов
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.update_image_display)
@@ -235,6 +238,73 @@ class MainApp(QtWidgets.QMainWindow):
         self.refresh_template_view()
         QtWidgets.QMessageBox.information(self, "Успех", "Шаблон успешно удален.")
 
+    def on_edit_clicked(self):
+        """Обработчик нажатия на кнопку 'Изменить'"""
+        print("Заглушка")
+
+        old_anomaly_name, ok = QtWidgets.QInputDialog.getText(self, "Изменить название аномалии", "Введите новое название аномалии:")
+        
+        if ok and old_anomaly_name:
+            if not os.listdir(self.output_folder):  
+                QtWidgets.QMessageBox.warning(self, "Ошибка", "Директория пуста. Невозможно выполнить изменение.")
+                return 
+            
+            filename = r'1_anomaly_2.png' # Заглушка
+            match = re.match(r'(\d+)_anomaly_(\w+)', filename)  # Проверка на соответствие формату
+            if match:
+                    anomaly_name = match.group(2)
+                    new_filename = filename.replace(anomaly_name, old_anomaly_name)
+
+                    old_filepath = os.path.join(self.output_folder, filename)
+                    new_filepath = os.path.join(self.output_folder, new_filename)
+
+                    try:
+                        os.rename(old_filepath, new_filepath)
+                        print(f"Файл переименован: {old_filepath} -> {new_filepath}")
+                        QtWidgets.QMessageBox.information(self, "Успех", f"Файл переименован в {new_filename}")
+                    except PermissionError as e:
+                        QtWidgets.QMessageBox.warning(self, "Ошибка", "Ошибка доступа при переименовании файла.")
+                    except Exception as e:
+                        QtWidgets.QMessageBox.warning(self, "Ошибка", "Произошла ошибка")
+            else:
+                QtWidgets.QMessageBox.warning(self, "Ошибка", "Неверный формат имени файла.")
+
+    def on_export_clicked(self):
+        """Обработчик нажатия на кнопку 'Выгрузить статистику'"""
+        # Проверка, что директория не пуста
+        if not os.listdir(self.output_folder):  
+            QtWidgets.QMessageBox.warning(self, "Ошибка", "Директория пуста. Невозможно выполнить выгрузку.")
+            return  
+        
+        directory = QtWidgets.QFileDialog.getExistingDirectory(self, "Выгрузить статистику", "")
+        if directory:
+            self.export_directory = Path(directory)
+            print(f"Выбрана директория для выгрузки: {self.export_directory}")
+            output_dir = os.path.join(self.export_directory, 'result.xlsx')
+
+            data = []
+            # Регулярное выражение для извлечения данных из имени файла
+            pattern = r'(\d+)_anomaly_(\w+)'  # \d+ - номер детали, \w+ - название аномалии
+            # Обход всех файлов в папке
+            for filename in os.listdir(self.output_folder):
+                if filename.endswith(".jpg") or filename.endswith(".png"):  # проверка на изображение
+                    match = re.search(pattern, filename)
+                    if match:
+                        # Извлекаем номер детали и название аномалии
+                        detail_number = match.group(1)
+                        anomaly_name = match.group(2)
+                        image_path = os.path.join(self.output_folder, filename)
+                        data.append([detail_number, anomaly_name, image_path])
+                        
+            try:
+                df = pandas.DataFrame(data, columns=["номер_детали", "название_аномалии", "путь_до_изображения"])
+                df.to_excel(output_dir, index=False)
+                print(f"Таблица сохранена по пути: {output_dir}")
+            except PermissionError as e:
+                QtWidgets.QMessageBox.warning(self, "Ошибка", "Ошибка доступа при сохранении файла.")
+        else:
+            print("Директория не выбрана")
+
     def on_set_directory_clicked(self):
         """Обработчик нажатия на кнопку 'Указать директорию'"""
         directory = QtWidgets.QFileDialog.getExistingDirectory(self, "Указать директорию", "")
@@ -264,8 +334,25 @@ class MainApp(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "Ошибка", f"Директория шаблона не существует: {template_directory}")
             return
 
+        # Перебираем файлы в папке
+        for file_name in os.listdir(self.output_folder):
+            file_path = os.path.join(self.output_folder, file_name)
+            try:
+                # Удаляем файл, если это файл
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                # Если это папка, рекурсивно удаляем её содержимое
+                elif os.path.isdir(file_path):
+                    os.rmdir(file_path)
+            except Exception as e:
+                print(f"Ошибка при удалении {file_path}: {e}")
+
         print("Анализ начался...")
-        self.timer.start(2000)  # Проверять каждые 2 секунды
+        if os.path.exists(self.excel_path):
+            os.remove(self.excel_path)  # Удаляем файл
+            print(f"Файл {self.excel_path} успешно удален.")
+        else:
+            print(f"Файл {self.excel_path} не существует.")
 
         set_reference_path(self.selected_directory, template_directory)
         
@@ -305,11 +392,10 @@ class MainApp(QtWidgets.QMainWindow):
             print(f"Папка {self.output_folder} не существует.")
             return
 
-        # Создаем новую сцену
         scene = QtWidgets.QGraphicsScene()
         self.ui.defect.setScene(scene)
-        
-        # Получаем список изображений, отсортированных по времени создания
+        df = pandas.read_excel(self.excel_path)
+
         files = sorted(
             [f for f in os.listdir(self.output_folder) if f.endswith(('.png', '.jpg', '.jpeg'))],
             key=lambda x: os.path.getmtime(os.path.join(self.output_folder, x))
@@ -331,11 +417,35 @@ class MainApp(QtWidgets.QMainWindow):
                 print(f"Ошибка загрузки изображения: {image_path}")
                 continue
 
-            # Изменение размера изображения по ширине QGraphicsView
+            # Масштабируем изображение
+            original_width = pixmap.width()
+            original_height = pixmap.height()
             scaled_pixmap = pixmap.scaled(view_width - 20, 300, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
 
+            # Коэффициенты масштабирования
+            scale_x = scaled_pixmap.width() / original_width
+            scale_y = scaled_pixmap.height() / original_height
+
+            # Создаем элемент для отображения изображения
             item = QtWidgets.QGraphicsPixmapItem(scaled_pixmap)
             item.setPos(0, y_offset)
+
+            # Ищем bounding box для текущего изображения
+            bounding_boxes = df[df["image_path"] == image_path]
+
+            for _, row in bounding_boxes.iterrows():
+                x, y, w, h = row["bounding_rect_x"], row["bounding_rect_y"], row["bounding_rect_w"], row["bounding_rect_h"]
+
+                x_scaled = x * scale_x
+                y_scaled = y * scale_y
+                w_scaled = w * scale_x
+                h_scaled = h * scale_y
+    
+                # Создаем прямоугольник, который будет рисоваться поверх изображения
+                rect_item = QtWidgets.QGraphicsRectItem(x_scaled, y_scaled, w_scaled, h_scaled)
+                rect_item.setPen(QtGui.QPen(QtGui.QColor(255, 0, 0), 2))  
+                rect_item.setBrush(QtGui.QBrush(QtCore.Qt.transparent))  
+                rect_item.setParentItem(item)  # Сделать прямоугольник дочерним элементом изображения
             scene.addItem(item)
 
             # Добавляем отступ для следующего изображения
@@ -349,8 +459,6 @@ class MainApp(QtWidgets.QMainWindow):
         self.ui.defect.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
 
         print(f"Отображено {len(files)} изображений.")
-
-
 
     def load_images_to_view(self):
         """Загружает изображения из текущей директории и отображает их в QListWidget"""
@@ -422,7 +530,6 @@ class MainApp(QtWidgets.QMainWindow):
         df = pandas.read_excel(self.template_file_path)
         # Оставляем только нужные колонки
         return df[["Наименование", "Код изделия", "Директория эталонов"]]
-
 
 class PandasModel(QAbstractTableModel):
     """Модель для отображения DataFrame в QTableView с чекбоксами"""
