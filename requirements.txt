@@ -37,6 +37,6 @@ scipy==1.15.1
 six==1.17.0
 threadpoolctl==3.5.0
 tifffile==2025.1.10
-trimesh==4.6.0
+trimesh==4.6.1
 tzdata==2025.1
 XlsxWriter==3.2.2
