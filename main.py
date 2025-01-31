@@ -5,6 +5,7 @@ import cv2
 from pathlib import Path
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import QAbstractTableModel, Qt, QCoreApplication
+from PIL import Image
 
 sys.path.append(os.path.abspath('./designUI'))
 from designUI.design import Ui_MainWindow, Ui_SelectTemplateDialog
@@ -76,7 +77,7 @@ class SelectTemplateDialog(QtWidgets.QDialog):
         code_item = QtWidgets.QTableWidgetItem(template_data.get("Код изделия", ""))
         self.ui.table.setItem(0, 0, name_item)
         self.ui.table.setItem(0, 1, code_item)
-
+        
         # Установка директории и предпросмотра
         directory = template_data.get("Директория эталонов", "")
         self.ui.directoryInput.setText(directory)
@@ -177,6 +178,15 @@ class MainApp(QtWidgets.QMainWindow):
         # Список отображённых файлов, чтобы не загружать их повторно
         self.processed_files = set()
 
+    def is_valid_file(self, file_path):
+        """Проверка, является ли файл изображением или моделью .obj/.stl"""
+        valid_image_extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.gif'}
+        valid_model_extensions = {'.obj', '.stl'}
+        
+        file_extension = Path(file_path).suffix.lower()
+        
+        return file_extension in valid_image_extensions or file_extension in valid_model_extensions
+
     def on_template_double_clicked(self, index):
         """Открывает диалоговое окно для редактирования шаблона при двойном клике"""
         if index.row() < 0:
@@ -184,7 +194,7 @@ class MainApp(QtWidgets.QMainWindow):
 
         # Получаем данные выбранного шаблона
         selected_template = self.template_df.iloc[index.row()].to_dict()
-
+        
         # Проверяем наличие всех нужных ключей
         required_keys = ["Наименование", "Код изделия", "Директория эталонов"]
         for key in required_keys:
@@ -197,7 +207,23 @@ class MainApp(QtWidgets.QMainWindow):
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
             # Получаем обновленные данные из диалога
             updated_data = dialog.get_template_data()
+            # Проверка содержимого директории для нового шаблона
+            directory_path = updated_data.get("Директория эталонов")
+            if not os.path.isdir(directory_path):
+                QtWidgets.QMessageBox.warning(self, "Ошибка", "Указанная директория не существует.")
+                return
 
+            # Получаем все файлы в директории и проверяем их расширения
+            valid_files_found = False
+            for file_name in os.listdir(directory_path):
+                file_path = os.path.join(directory_path, file_name)
+                if os.path.isfile(file_path) and self.is_valid_file(file_path):
+                    valid_files_found = True
+                    break
+
+            if not valid_files_found:
+                QtWidgets.QMessageBox.warning(self, "Ошибка", "В указанной директории нет поддерживаемых файлов (изображений или моделей .obj/.stl).")
+                return
             # Обновляем данные в DataFrame
             for key, value in updated_data.items():
                 self.template_df.at[index.row(), key] = value
@@ -211,7 +237,24 @@ class MainApp(QtWidgets.QMainWindow):
         dialog = SelectTemplateDialog()  # Мы открываем диалог для нового шаблона
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
             template_data = dialog.get_template_data()  # Получаем данные из диалога
-            # Нет необходимости в проверке, так как данные всегда валидны
+            # Проверка содержимого директории для нового шаблона
+            directory_path = template_data.get("Директория эталонов")
+            if not os.path.isdir(directory_path):
+                QtWidgets.QMessageBox.warning(self, "Ошибка", "Указанная директория не существует.")
+                return
+
+            # Получаем все файлы в директории и проверяем их расширения
+            valid_files_found = False
+            for file_name in os.listdir(directory_path):
+                file_path = os.path.join(directory_path, file_name)
+                if os.path.isfile(file_path) and self.is_valid_file(file_path):
+                    valid_files_found = True
+                    break
+
+            if not valid_files_found:
+                QtWidgets.QMessageBox.warning(self, "Ошибка", "В указанной директории нет поддерживаемых файлов (изображений или моделей .obj/.stl).")
+                return
+            
             self.add_template_to_table(template_data)
 
     def on_delete_template_clicked(self):
@@ -271,8 +314,8 @@ class MainApp(QtWidgets.QMainWindow):
             os.rename(old_filepath, new_filepath)
             
             # Обновляем Excel: находим строку с этим файлом и заменяем аномалию
-            df.loc[df["image_path"] == old_filepath, "anomaly_type"] = new_anomaly_name
-            df.loc[df["image_path"] == old_filepath, "image_path"] = new_filepath  # Обновляем путь
+            df.loc[df["anomaly_filename"] == old_filepath, "anomaly_type"] = new_anomaly_name
+            df.loc[df["anomaly_filename"] == old_filepath, "image_path"] = new_filepath  # Обновляем путь
 
             # Сохраняем изменения
             df.to_excel(self.excel_path, index=False)
@@ -288,27 +331,26 @@ class MainApp(QtWidgets.QMainWindow):
     def save_images(self):
         df = pandas.read_excel(self.excel_path)
         img = cv2.imread(self.base_image_path)
-        output_folder = os.path.join(self.export_directory, "result_images")
-        os.makedirs(output_folder, exist_ok=True)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Преобразуем изображение в формат RGB для Pillow
+        output_folder = Path(self.export_directory) / "result_images"
+        output_folder.mkdir(parents=True, exist_ok=True)
 
         for _, row in df.iterrows():
-            filename = os.path.basename(row["anomaly_filename"])  # Извлекаем только имя файла
-
-            img_path = os.path.join(output_folder, filename)  # Создаем путь с нужной папкой
+            filename = Path(row["anomaly_filename"]).name
+            img_path = output_folder / filename
 
             anomaly_type = row["anomaly_type"]
             x, y, w, h = row["bounding_rect_x"], row["bounding_rect_y"], row["bounding_rect_w"], row["bounding_rect_h"]
 
-            colour = (0, 0, 255) if anomaly_type == 'Unknown' else (255, 0, 0)
+            colour = (255, 0, 0) if anomaly_type == 'Unknown' else (0, 0, 255)
 
             output_image = img.copy()
-            cv2.rectangle(output_image, (x, y), (x + w, y + h), colour, 2) 
-            
-            if not cv2.imwrite(img_path, output_image):
-                QtWidgets.QMessageBox.warning(self, "Ошибка", "Ошибка сохранения изображений.")
-                return
-                
+            cv2.rectangle(output_image, (x, y), (x + w, y + h), colour, 2)
 
+            # Сохраняем через Pillow
+            pil_img = Image.fromarray(output_image)  # Преобразуем в изображение Pillow
+            pil_img.save(str(img_path))  # Сохраняем через Pillow
+                    
     def on_export_clicked(self):
         """Обработчик нажатия на кнопку 'Выгрузить статистику'"""
         # Проверка, что директория не пуста
@@ -327,6 +369,7 @@ class MainApp(QtWidgets.QMainWindow):
                 # Сохраняем по новому пути
                 df.to_excel(output_dir, index=False)
                 self.save_images()
+                QtWidgets.QMessageBox.information(self, "Успех", "Статистика успешно сохранена.")
             except PermissionError as e:
                 QtWidgets.QMessageBox.warning(self, "Ошибка", "Ошибка доступа при сохранении файла.")
         else:
@@ -376,8 +419,12 @@ class MainApp(QtWidgets.QMainWindow):
 
         print("Анализ начался...")
         if os.path.exists(self.excel_path):
-            os.remove(self.excel_path)  # Удаляем файл
-            print(f"Файл {self.excel_path} успешно удален.")
+            try:
+                os.remove(self.excel_path)  # Удаляем файл
+                print(f"Файл {self.excel_path} успешно удален.")
+            except PermissionError:
+                QtWidgets.QMessageBox.warning(self, "Ошибка", f"Файл {self.excel_path} уже открыт. Закройте его и попробуйте снова.")
+                return
         else:
             print(f"Файл {self.excel_path} не существует.")
 
@@ -497,7 +544,6 @@ class MainApp(QtWidgets.QMainWindow):
 
         print(f"Отображено {len(df)} изображений.")  # Количество строк = количество отображенных изображений
 
-
     def load_images_to_view(self):
         """Загружает изображения из текущей директории и отображает их в QListWidget"""
         if not self.selected_directory or not self.selected_directory.exists():
@@ -535,7 +581,6 @@ class MainApp(QtWidgets.QMainWindow):
 
         # Устанавливаем размер элементов в QListWidget
         self.ui.image_list.setIconSize(QtCore.QSize(widget_width, widget_width))
-
 
     def add_template_to_table(self, template_data):
         """Добавить шаблон в таблицу"""
