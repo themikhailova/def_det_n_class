@@ -63,7 +63,7 @@ def resize_and_align_reference(input_image, reference_image):
 
     return aligned_reference
 
-def detect_and_save_anomalies(input_image, reference_image, output_folder, mode, count_def, region_size=0.05, min_anomaly_size=20):
+def detect_and_save_anomalies(img_path, input_image, reference_image, output_folder, mode, count_def, region_size=0.05, min_anomaly_size=20):
     '''
     Основной алгоритм обнаружения аномалий и их сохранения в виде отдельных изображений.
     '''  
@@ -169,10 +169,15 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, mode,
         # os.makedirs(output_folder, exist_ok=True)
 
         excel_path = "./anomalies.xlsx"
-        if os.path.exists(excel_path):
-            df = pd.read_excel(excel_path)
-        else:
-            df = pd.DataFrame(columns=columns)
+        try:
+            if os.path.exists(excel_path):
+                df = pd.read_excel(excel_path)
+            else:
+                df = pd.DataFrame(columns=columns) 
+
+        except PermissionError:
+            print(f"Файл {excel_path} уже открыт. Закройте его и попробуйте снова.")
+            df = None
         anomaly_index = 0  # Индекс аномалии
         # Ваш код обработки изображений
         for contour in contours:
@@ -197,7 +202,8 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, mode,
             
             # Запись данных в DataFrame
             data = {
-                "image_path": anomaly_filename,
+                "image_path": img_path,
+                "anomaly_filename": anomaly_filename,
                 "part_number": count_def,
                 "anomaly_type": anomaly_type,
                 "contour": str(contour.tolist()),
@@ -211,7 +217,10 @@ def detect_and_save_anomalies(input_image, reference_image, output_folder, mode,
             for key in features.keys():
                 data[key] = features[key]
             
-            df = pd.concat([df, pd.DataFrame([data])], ignore_index=True)
+            if df is None or df.empty or df.isna().all().all():
+                df = pd.DataFrame([data])  # Если df пустой или содержит только NaN, создаем новый
+            else:
+                df = pd.concat([df, pd.DataFrame([data])], ignore_index=True)
             
             anomaly_index += 1
 
@@ -253,9 +262,9 @@ def remove_back_and_detect(img_path, reference_path, output_folder, count_def, m
     
     input_image = remover(cv2.imread(img_path))
     reference_image = remover(cv2.imread(reference_path))
-    cv2.imwrite('./input_img.png', align(input_image))
+    cv2.imwrite('./input_img.png', input_image)
     start = time.time()
-    detect_and_save_anomalies(input_image, reference_image, output_folder, mode, count_def)
+    detect_and_save_anomalies(img_path, input_image, reference_image, output_folder, mode, count_def)
     finish = time.time()
 
     res_msec = (finish - start) * 1000
