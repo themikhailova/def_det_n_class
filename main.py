@@ -6,13 +6,15 @@ from pathlib import Path
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import QAbstractTableModel, Qt, QCoreApplication
 from PIL import Image
+import ast  # Для преобразования строки в кортеж
+
 
 sys.path.append(os.path.abspath('./designUI'))
 from designUI.design import Ui_MainWindow, Ui_SelectTemplateDialog
 
 sys.path.append(os.path.abspath('./detect'))
 from detect.character import set_reference_path
-
+from detect.classif import retrain_model
 
 # Укажите путь к папке plugins
 os.environ['QT_PLUGIN_PATH'] = r"./venv/Lib/site-packages/PyQt5/Qt5/plugins"
@@ -163,11 +165,12 @@ class MainApp(QtWidgets.QMainWindow):
         # self.ui.analysis.clicked.connect(self.on_run_analysis_clicked)
         self.ui.statistics.clicked.connect(self.on_export_clicked)
         self.ui.edit.clicked.connect(self.on_edit_clicked)
-
+        self.ui.save.clicked.connect(self.on_save_clicked)
         # Папка с результатами анализа
         self.output_folder = "C:/output_folder/"
         self.excel_path = "./anomalies.xlsx"
         self.base_image_path = "./input_img.png"
+        self.anomalies_types = "./types.xlsx"
         # Таймер для проверки новых файлов
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.update_image_display)
@@ -282,20 +285,66 @@ class MainApp(QtWidgets.QMainWindow):
         self.refresh_template_view()
         QtWidgets.QMessageBox.information(self, "Успех", "Шаблон успешно удален.")
 
+    def on_save_clicked(self):
+        new_data_path = self.excel_path
+        retrain_model(new_data_path)
+        QtWidgets.QMessageBox.information(self, "Успех", f"Модель дообучена на новых данных")
+
     def on_edit_clicked(self):
         """Обработчик нажатия на кнопку 'Изменить'"""
-        
-        # Получаем новое название аномалии от пользователя
-        new_anomaly_name, ok = QtWidgets.QInputDialog.getText(self, "Изменить название аномалии", "Введите новое название аномалии:")
-        
-        if not (ok and new_anomaly_name):
-            return  
 
-        if not os.listdir(self.output_folder):  
+        try:
+            types_df = pandas.read_excel(self.anomalies_types)
+        except FileNotFoundError:
+            types_df = pandas.DataFrame(columns=["anomaly_type", "anomaly_colour"]) 
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(self, "Ошибка", f"Не удалось загрузить список аномалий: {str(e)}")
+            return
+
+        anomaly_colors = {
+            row["anomaly_type"]: ast.literal_eval(row["anomaly_colour"])
+            for _, row in types_df.iterrows()
+        }
+
+        categories = list(anomaly_colors.keys()) + ["new anomaly"]
+
+        new_anomaly_name, ok = QtWidgets.QInputDialog.getItem(
+            self, "Выбор аномалии", "Выберите категорию аномалии:", categories, 0, False
+        )
+        if not ok:
+            return  # Отмена выбора
+
+        # Если выбрана новая аномалия, запрашиваем имя
+        if new_anomaly_name == 'new anomaly':
+            new_anomaly_name, ok = QtWidgets.QInputDialog.getText(
+                self, "Новая аномалия", "Введите название новой аномалии:"
+            )
+            if not ok or not new_anomaly_name.strip():
+                return  # Отмена ввода
+
+            # Открываем диалог выбора цвета
+            color = QtWidgets.QColorDialog.getColor()
+
+            if not color.isValid():
+                return  # Отмена выбора цвета
+
+            # Получаем цвет в формате (R, G, B)
+            new_colour = (color.red(), color.green(), color.blue())
+
+            new_anomaly_row = pandas.DataFrame({"anomaly_type": [new_anomaly_name], "anomaly_colour": [str(new_colour)]})
+            types_df = pandas.concat([types_df, new_anomaly_row], ignore_index=True)
+
+            types_df.to_excel(self.anomalies_types, index=False)
+
+        else:
+            # Берем цвет из загруженного списка
+            new_colour = anomaly_colors.get(new_anomaly_name, (128, 128, 128))  # Серый по умолчанию
+
+        # Проверяем, не пустая ли директория
+        if not os.listdir(self.output_folder):
             QtWidgets.QMessageBox.warning(self, "Ошибка", "Директория пуста. Невозможно выполнить изменение.")
-            return 
+            return
 
-        # Загружаем Excel
         df = pandas.read_excel(self.excel_path)
 
         filename = r'1_anomaly_2.png'  
@@ -306,27 +355,19 @@ class MainApp(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "Ошибка", "Неверный формат имени файла.")
             return
 
-        anomaly_name = match.group(2)
-        new_filename = filename.replace(anomaly_name, new_anomaly_name)
-        new_filepath = os.path.join(self.output_folder, new_filename)
-
         try:
-            os.rename(old_filepath, new_filepath)
-            
-            # Обновляем Excel: находим строку с этим файлом и заменяем аномалию
-            df.loc[df["anomaly_filename"] == old_filepath, "anomaly_type"] = new_anomaly_name
-            df.loc[df["anomaly_filename"] == old_filepath, "image_path"] = new_filepath  # Обновляем путь
+            # Обновляем, заменяем аномалию и цвет
+            df.loc[df["anomaly_filename"] == old_filepath, "Y"] = new_anomaly_name
+            df.loc[df["anomaly_filename"] == old_filepath, "anomaly_colour"] = str(new_colour)  # Сохраняем в строковом формате
 
             # Сохраняем изменения
             df.to_excel(self.excel_path, index=False)
 
-            print(f"Файл и таблица обновлены: {old_filepath} -> {new_filepath}")
-            QtWidgets.QMessageBox.information(self, "Успех", f"Файл переименован в {new_filename} и обновлен в таблице.")
-
-        except PermissionError:
-            QtWidgets.QMessageBox.warning(self, "Ошибка", "Ошибка доступа при переименовании файла.")
+            print(f"Файл и таблица обновлены: {old_filepath}")
+            QtWidgets.QMessageBox.information(self, "Успех", f"Файл обновлен в таблице.")
+            self.display_all_images()
         except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Ошибка", f"Произошла ошибка")
+            QtWidgets.QMessageBox.warning(self, "Ошибка", f"Произошла ошибка: {str(e)}")
 
     def save_images(self):
         df = pandas.read_excel(self.excel_path)
@@ -339,18 +380,23 @@ class MainApp(QtWidgets.QMainWindow):
             filename = Path(row["anomaly_filename"]).name
             img_path = output_folder / filename
 
-            anomaly_type = row["anomaly_type"]
             x, y, w, h = row["bounding_rect_x"], row["bounding_rect_y"], row["bounding_rect_w"], row["bounding_rect_h"]
 
-            colour = (255, 0, 0) if anomaly_type == 'Unknown' else (0, 0, 255)
+            # Преобразуем цвет из строки в кортеж (R, G, B)
+            try:
+                colour = ast.literal_eval(row["anomaly_colour"])  # Преобразует строку в кортеж
+                if not (isinstance(colour, tuple) and len(colour) == 3):  
+                    raise ValueError
+            except (ValueError, SyntaxError):
+                colour = (0, 0, 255)  # Цвет по умолчанию (синий), если ошибка в данных
 
             output_image = img.copy()
             cv2.rectangle(output_image, (x, y), (x + w, y + h), colour, 2)
 
             # Сохраняем через Pillow
-            pil_img = Image.fromarray(output_image)  # Преобразуем в изображение Pillow
-            pil_img.save(str(img_path))  # Сохраняем через Pillow
-                    
+            pil_img = Image.fromarray(output_image)
+            pil_img.save(str(img_path))
+
     def on_export_clicked(self):
         """Обработчик нажатия на кнопку 'Выгрузить статистику'"""
         # Проверка, что директория не пуста
@@ -510,7 +556,7 @@ class MainApp(QtWidgets.QMainWindow):
         # Перебираем bounding box'ы из таблицы и создаем копии изображения
         for _, row in df.iterrows():
             x, y, w, h = row["bounding_rect_x"], row["bounding_rect_y"], row["bounding_rect_w"], row["bounding_rect_h"]
-            anomaly_type = row["anomaly_type"]
+            anomaly_colour = row["anomaly_colour"]
             # Масштабируем координаты bounding box'а
             x_scaled = x * scale_x
             y_scaled = y * scale_y
@@ -522,10 +568,20 @@ class MainApp(QtWidgets.QMainWindow):
             image_copy.setPos(0, y_offset)
             # Создаем прямоугольник
             rect_item = QtWidgets.QGraphicsRectItem(x_scaled, y_scaled, w_scaled, h_scaled)
-            if anomaly_type == 'Unknown':
-                rect_item.setPen(QtGui.QPen(QtGui.QColor(255, 0, 0), 2))  
-            else: 
-                rect_item.setPen(QtGui.QPen(QtGui.QColor(0, 0, 255), 2))  
+            try:
+                colour = ast.literal_eval(row["anomaly_colour"])  # Преобразует строку в кортеж (R, G, B)
+                if not (isinstance(colour, tuple) and len(colour) == 3):  
+                    raise ValueError
+            except (ValueError, SyntaxError):
+                colour = (0, 0, 255)  # Цвет по умолчанию (синий), если ошибка в данных
+
+            # Создаем цвет и применяем его к прямоугольнику
+            qcolor = QtGui.QColor(*colour)  # Разворачиваем кортеж (R, G, B) в аргументы
+            rect_item.setPen(QtGui.QPen(qcolor, 2))
+            # if anomaly_type == 'Unknown':
+            #     rect_item.setPen(QtGui.QPen(QtGui.QColor(255, 0, 0), 2))  
+            # else: 
+            #     rect_item.setPen(QtGui.QPen(QtGui.QColor(0, 0, 255), 2))  
             
             rect_item.setBrush(QtGui.QBrush(QtCore.Qt.transparent))  
             rect_item.setParentItem(image_copy)
