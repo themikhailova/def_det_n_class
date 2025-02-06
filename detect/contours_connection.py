@@ -3,7 +3,7 @@ import numpy as np
 from scipy.spatial.distance import cdist
 import sys, os
 sys.path.append(os.path.abspath('./detect'))
-from detect.features import calculate_features
+from features import calculate_features
 
 def find_nearest_points(contour1, contour2):
     # Преобразуем контуры в двумерные массивы точек
@@ -215,11 +215,11 @@ def remove_nested_contours(contours, input_gray, max_area, max_perimeter, max_ce
                 diff_min_intensivity = abs(float(features1['min_intensity']) - float(features2['min_intensity']))
                 diff_max_intensity = abs(float(features1['max_intensity']) - float(features2['max_intensity']))
                 # если разница между средней яркостью, вокнутостью и сложностью контуров не превосходит установленный порог 
-                # if (diff_intensity < intensity_threshold and 
-                #     diff_min_intensivity < min_intensivity_threshol and 
-                #     diff_max_intensity < max_intensity_threshol):
-                outer_contour = merge_contours(outer_contour, inner_contour)
-                contours_to_remove.add(j)  # Добавляем индекс вложенного контура
+                if (diff_intensity < intensity_threshold and 
+                    diff_min_intensivity < min_intensivity_threshol and 
+                    diff_max_intensity < max_intensity_threshol):
+                    outer_contour = merge_contours(outer_contour, inner_contour)
+                    contours_to_remove.add(j)  # Добавляем индекс вложенного контура
                 # elif (diff_area > 40):
                 #     outer_contour = merge_contours(outer_contour, inner_contour)
                 #     contours_to_remove.add(j)
