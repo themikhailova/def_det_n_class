@@ -5,12 +5,12 @@ import os
 import sys
 import pandas as pd
 
-# from classify_anomalies import classify_anomaly
 
 sys.path.append(os.path.abspath('./detect'))
 from detect.features import calculate_features, save_features_to_excel
 from detect.detect_anomalies import detect_and_highlight_anomalies, detect_differ
 from detect.contours_connection import connect_contours, remove_nested_contours, merge_overlapping_contours
+from detect.classif import classify_anomaly
 
 sys.path.append(os.path.abspath('./preprocess'))
 from preprocess.backremoveCV import remover
@@ -179,6 +179,7 @@ def detect_and_save_anomalies(img_path, input_image, reference_image, output_fol
             print(f"Файл {excel_path} уже открыт. Закройте его и попробуйте снова.")
             df = None
         anomaly_index = 0  # Индекс аномалии
+
         for contour in contours:
             if cv2.contourArea(contour) < 15:
                 continue
@@ -186,14 +187,14 @@ def detect_and_save_anomalies(img_path, input_image, reference_image, output_fol
             
             features = calculate_features(contour, input_gray, max_area, max_perimeter, max_centroid)
             
-            anomaly_type, colour = None, None
-            if anomaly_type is None:
+            anomaly_type, colour = classify_anomaly(features)
+            if anomaly_type == 'no':
                 colour = (0, 0, 255)
-                anomaly_type = 'Unknown'
+                # anomaly_type = 'Unknown'
             
             x, y, w, h = cv2.boundingRect(contour)
             
-            cv2.drawContours(test, [contour], -1, (0, 0, 255), 2)
+            cv2.drawContours(test, [contour], -1, colour, 2)
             # cv2.rectangle(output_image, (x, y), (x + w, y + h), colour, 2) 
             
             anomaly_filename = f"{output_folder}/{count_def}_anomaly_{anomaly_index}.png"
@@ -204,7 +205,8 @@ def detect_and_save_anomalies(img_path, input_image, reference_image, output_fol
                 "image_path": img_path,
                 "anomaly_filename": anomaly_filename,
                 "part_number": count_def,
-                "anomaly_type": anomaly_type,
+                "Y": anomaly_type,
+                "anomaly_colour": colour,
                 "contour": str(contour.tolist()),
                 "bounding_rect_x": x,
                 "bounding_rect_y": y,
@@ -281,6 +283,7 @@ def set_reference_path(defect_path, template_directory):
     if defect_path:
         print(f"Заглушка: Путь к директории успешно получен: {defect_path}")
         print(f"Директория шаблона: {template_directory}")
+        
         output_folder = r'C:/output_folder'
         
         # Цикл по всем файлам в папке
