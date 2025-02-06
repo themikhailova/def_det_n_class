@@ -1,120 +1,4 @@
 import pandas as pd
-import pickle
-from sklearn.model_selection import train_test_split, GridSearchCV, LeaveOneOut
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
-from sklearn.preprocessing import LabelEncoder
-import numpy as np
-
-def train_model(file_path):
-    """
-    Обучение модели случайного леса на данных из CSV-файла и сохранение модели.
-    """
-    # Загрузка данных из файла
-    data = pd.read_excel(file_path)
-    
-    # Разделение данных на признаки и метки
-    features = data.iloc[:, :-1]  # Все колонки, кроме последней
-    print(features)
-    labels = data.iloc[:, -1]  # Последняя колонка
-
-    label_encoder = LabelEncoder()
-    labels = label_encoder.fit_transform(labels)
-
-    # Разделение на обучающую и тестовую выборки
-    X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.2, random_state=42)
-    print(X_train)
-    # print(y_train.shape)    
-    # Параметры для настройки модели случайного леса с помощью GridSearchCV
-    param_grid = {
-        'n_estimators': [50, 100, 200],
-        'max_depth': [None, 10, 20, 30],
-        'min_samples_split': [2, 3, 5, 10],
-        'min_samples_leaf': [1, 2, 4],
-        'max_features': ['sqrt', 'log2']
-    }
-    
-    # Обучение модели с использованием GridSearchCV и LeaveOneOut
-    clf = RandomForestClassifier(random_state=42)
-    loo = LeaveOneOut()
-    grid_search = GridSearchCV(clf, param_grid, cv=loo, scoring='accuracy', n_jobs=-1, verbose=2)
-    grid_search.fit(X_train, y_train)
-    
-    # Оценка точности и сохранение модели
-    best_model = grid_search.best_estimator_
-    accuracy = accuracy_score(y_test, best_model.predict(X_test))
-    print(f"Точность на тестовых данных: {accuracy * 100:.2f}%")
-
-    # Вывод лучших подобранных параметров
-    print("Лучшие параметры модели:")
-    for param, value in grid_search.best_params_.items():
-        print(f"{param}: {value}")
-
-    # Сохранение модели и энкодера
-    with open('./models/random_forest_model.pkl', 'wb') as model_file:
-        pickle.dump(best_model, model_file)
-    with open('./models/label_encoder.pkl', 'wb') as le_file:
-        pickle.dump(label_encoder, le_file)
-
-# Пример вызова функции
-# train_model('./anomalies.xlsx')  # Укажите путь к вашему файлу CSV
-
-def classify_image(features, threshold=0.6):
-    """
-        Классификация изображения с учётом порога уверенности.
-
-        :param image: Изображение для классификации
-        :return: Кортеж (предсказанный класс, уверенность), или (None, уверенность) при низкой уверенности
-    """
-    with open('./models/random_forest_model.pkl', 'rb') as model_file:
-            loaded_model = pickle.load(model_file)
-        
-    with open('./models/label_encoder.pkl', 'rb') as le_file:
-        loaded_label_encoder = pickle.load(le_file)
-
-    # Предсказания и вероятности с использованием модели
-    probs = loaded_model.predict_proba(features)
-    max_prob = np.max(probs)  # Максимальная вероятность
-    predicted_label = loaded_model.predict(features)[0]  # Класс с максимальной вероятностью
-    predicted_label = loaded_label_encoder.inverse_transform([predicted_label])[0]
-
-    # Если уверенность выше порога, возвращаем результат
-    if max_prob >= threshold:
-            #print(f"Предсказанный класс: {predicted_label}, Уверенность: {max_prob:.2f}")
-        return predicted_label, max_prob  # Возвращаем числовую метку класса
-    else:
-        # Если уверенность ниже порога, классификация не удалась
-        print("Не удалось классифицировать изображение.")
-    return None, max_prob
-
-
-# Подготовка новых данных
-new_data = [[9.5878794,	0.754464765, 0.571428571, 216.452381]]  # Пример данных одной фотографии
-df_new_data = pd.DataFrame(new_data, columns=['Compactness', 'Eccentricity', 'Aspect Ratio', 'Mean Intensity'])  # Названия должны совпадать с обучающими
-print(classify_image(df_new_data))
-
-# # Загрузка модели и энкодера
-# with open('./models/random_forest_model.pkl', 'rb') as model_file:
-#     model = pickle.load(model_file)
-# with open('./models/label_encoder.pkl', 'rb') as le_file:
-#     label_encoder = pickle.load(le_file)
-
-# # Подготовка новых данных
-# new_data = [[9.5878794,	0.754464765, 0.571428571, 216.452381]] # Пример данных одной фотографии
-# df_new_data = pd.DataFrame(new_data, columns=['Compactness', 'Eccentricity', 'Aspect Ratio', 'Mean Intensity'])  # Названия должны совпадать с обучающими
-# print(df_new_data)
-# # Прогнозирование
-# predictions = model.predict(df_new_data)
-
-# # Если нужно декодировать предсказания
-# decoded_predictions = label_encoder.inverse_transform(predictions)
-# print(decoded_predictions)
-
-
-
-
-'''
-import pandas as pd
 import numpy as np
 import pickle
 from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
@@ -125,9 +9,56 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score
 import os
 
+
+import pickle
+import numpy as np
+import cv2
+
+# Загрузка моделей
+def load_trained_models(model_path='./detect/models'):
+    models = {}
+    for model_name in ['rf_model.pkl', 'gb_model.pkl', 'knn_model.pkl', 'meta_model.pkl', 'label_encoder.pkl']:
+        with open(f"{model_path}/{model_name}", 'rb') as file:
+            models[model_name] = pickle.load(file)
+    return models
+
+FEATURE_COLUMNS = [
+    'area', 'perimeter', 'relative_area', 'relative_perimeter', 'relative_centroid_distance', 'compactness', 'aspect_ratio', 'eccentricity', 'equivalent_diameter', 'angularity', 'complexity', 'fourier_3', 'fourier_5', 'fourier_7', 'fourier_9', 'mean_intensity', 'median_intensity', 'std_intensity', 'max_intensity', 'min_intensity', 'uniformity', 'entropy', 'mean_gradient', 'std_gradient'
+]
+# Функция классификации аномалий
+def classify_anomaly(features):
+    models = load_trained_models()
+    
+    base_models = [models['rf_model.pkl'], models['gb_model.pkl'], models['knn_model.pkl']]
+    meta_model = models['meta_model.pkl']
+    label_encoder = models['label_encoder.pkl']
+
+    # Создаём DataFrame с правильными именами столбцов
+    feature_values = pd.DataFrame([features], columns=FEATURE_COLUMNS)
+
+    # Получаем предсказания базовых моделей
+    base_predictions = np.column_stack([model.predict_proba(feature_values)[:, 1] for model in base_models])
+
+    # Делаем финальное предсказание с мета-моделью
+    final_prediction = meta_model.predict(base_predictions)
+    anomaly_type = label_encoder.inverse_transform(final_prediction)[0]
+
+    # Назначаем цвет для типа аномалии
+    anomaly_colors = {
+        'leakage': (255, 0, 0),  
+        'fistulas': (0, 255, 0),  
+        'bevel': (0, 255, 255),  
+        'scratch': (255, 165, 0),  
+        'no': (0, 0, 255),  
+    }
+    
+    colour = anomaly_colors.get(anomaly_type, (128, 128, 128))  # Серый, если тип неизвестен
+
+    return anomaly_type, colour
+
 def load_data(file_path):
-    data = pd.read_excel(file_path)
-    features = data[['Compactness', 'Eccentricity', 'Aspect Ratio', 'Mean Intensity']]
+    data = pd.read_excel(file_path, engine="openpyxl")
+    features = data[['area', 'perimeter', 'relative_area', 'relative_perimeter', 'relative_centroid_distance', 'compactness', 'aspect_ratio', 'eccentricity', 'equivalent_diameter', 'angularity', 'complexity', 'fourier_3', 'fourier_5', 'fourier_7', 'fourier_9', 'mean_intensity', 'median_intensity', 'std_intensity', 'max_intensity', 'min_intensity', 'uniformity', 'entropy', 'mean_gradient', 'std_gradient']]
     labels = data['Y']
     return features, labels
 
@@ -208,7 +139,7 @@ def stacking(base_models, meta_model, X_train, y_train, X_test, n_folds=5):
     final_predictions = meta_model.predict(test_meta)
     return final_predictions, base_models, meta_model
 
-def save_models(base_models, meta_model, label_encoder, save_path='./models'):
+def save_models(base_models, meta_model, label_encoder, save_path='./detect/models'):
     os.makedirs(save_path, exist_ok=True)
     
     for name, model in base_models:
@@ -234,7 +165,95 @@ def main(file_path):
     evaluate_model(y_test, predictions)
     save_models(trained_base_models, trained_meta_model, label_encoder)
 
-file_path = './anomalies.xlsx'
-main(file_path)
+# file_path = './train.xlsx'
+# main(file_path)
 
-'''
+# Путь к файлу с данными для обучения
+TRAINING_DATA_PATH = './train.xlsx'
+
+def update_training_data(new_data_path, training_data_path=TRAINING_DATA_PATH):
+    """
+    Обновляет тренировочный датасет, добавляя новые данные.
+    """
+    # Загружаем новые данные
+    new_data = pd.read_excel(new_data_path, engine="openpyxl")
+
+    if os.path.exists(training_data_path):
+        # Загружаем старые данные
+        old_data = pd.read_excel(training_data_path, engine="openpyxl")
+
+        # Объединяем датасеты
+        combined_data = pd.concat([old_data, new_data], ignore_index=True)
+
+        # Удаляем дубликаты, если они есть
+        combined_data.drop_duplicates(inplace=True)
+    else:
+        # Если старых данных нет, используем только новые
+        combined_data = new_data
+
+    # Сохраняем обновленный датасет
+    combined_data.to_excel(training_data_path, index=False, engine="openpyxl")
+    print(f"Данные обновлены и сохранены в {training_data_path}")
+
+    return combined_data
+
+def retrain_model(new_data_path, model_path='./detect/models'):
+    # Обновляем датасет
+    updated_data = update_training_data(new_data_path)
+
+    # Загружаем обновленные данные
+    new_features, new_labels = load_data(TRAINING_DATA_PATH)
+   
+    # Загружаем обученные модели
+    models = load_trained_models(model_path)
+    
+    base_models = {
+        'rf': models['rf_model.pkl'],
+        'gb': models['gb_model.pkl'],
+        'knn': models['knn_model.pkl']
+    }
+    meta_model = models['meta_model.pkl']
+    label_encoder = models['label_encoder.pkl']
+    
+    # Преобразуем метки в числовые
+    new_labels_encoded = label_encoder.transform(new_labels)
+
+    # Загружаем старые данные для дообучения
+    old_data_path = './train.xlsx'  # Путь к старым данным
+    old_features, old_labels = load_data(old_data_path)
+    old_labels_encoded = label_encoder.transform(old_labels)
+    
+    # Объединяем старые и новые данные
+    combined_features = pd.concat([old_features, new_features], ignore_index=True)
+    combined_labels = np.concatenate([old_labels_encoded, new_labels_encoded])
+    
+    # Разделяем на тренировочные и тестовые данные
+    X_train, X_test, y_train, y_test = train_test_split(
+        combined_features, combined_labels, test_size=0.2, random_state=42, stratify=combined_labels
+    )
+    
+    # Проверка классов
+    if len(np.unique(y_train)) < 2:
+        print("Недостаточно классов для дообучения. Использую старые данные для балансировки.")
+        return
+    
+    # Дообучение базовых моделей
+    for name, model in base_models.items():
+        print(f"Дообучение модели {name}...")
+        model.fit(X_train, y_train)
+    
+    # Создание мета-признаков
+    train_meta = np.column_stack([model.predict_proba(X_train)[:, 1] for model in base_models.values()])
+    test_meta = np.column_stack([model.predict_proba(X_test)[:, 1] for model in base_models.values()])
+
+    # Дообучение мета-модели
+    print("Дообучение мета-модели...")
+    meta_model.fit(train_meta, y_train)
+
+    # Оценка
+    predictions = meta_model.predict(test_meta)
+    evaluate_model(y_test, predictions)
+
+    # Сохранение обновленных моделей
+    save_models(base_models.items(), meta_model, label_encoder, model_path)
+    print("Дообучение завершено!")
