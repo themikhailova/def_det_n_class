@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import pandas as pd
 
-def save_features_to_excel(features_list, filename):
+def save_features_to_excel(features_list, anomaly_filename, filename):
     """
     Save a list of feature dictionaries to an Excel file.
 
@@ -10,6 +10,7 @@ def save_features_to_excel(features_list, filename):
     :param filename: Path to the output Excel file.
     """
     data = {
+            'anomaly_filename': [anomaly_filename],
             'area': [features_list['area']],
             'perimeter': [features_list['perimeter']],
             'relative_area': [features_list['relative_area']],
