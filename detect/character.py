@@ -179,7 +179,6 @@ def detect_and_save_anomalies(img_path, input_image, reference_image, output_fol
             print(f"Файл {excel_path} уже открыт. Закройте его и попробуйте снова.")
             df = None
         anomaly_index = 0  # Индекс аномалии
-        # Ваш код обработки изображений
         for contour in contours:
             if cv2.contourArea(contour) < 15:
                 continue
