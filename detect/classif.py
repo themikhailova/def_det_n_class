@@ -168,30 +168,21 @@ def main(file_path):
 # file_path = './train.xlsx'
 # main(file_path)
 
-# Путь к файлу с данными для обучения
 TRAINING_DATA_PATH = './train.xlsx'
 
 def update_training_data(new_data_path, training_data_path=TRAINING_DATA_PATH):
     """
     Обновляет тренировочный датасет, добавляя новые данные.
     """
-    # Загружаем новые данные
     new_data = pd.read_excel(new_data_path, engine="openpyxl")
 
     if os.path.exists(training_data_path):
-        # Загружаем старые данные
         old_data = pd.read_excel(training_data_path, engine="openpyxl")
-
-        # Объединяем датасеты
         combined_data = pd.concat([old_data, new_data], ignore_index=True)
-
-        # Удаляем дубликаты, если они есть
         combined_data.drop_duplicates(inplace=True)
     else:
-        # Если старых данных нет, используем только новые
         combined_data = new_data
 
-    # Сохраняем обновленный датасет
     combined_data.to_excel(training_data_path, index=False, engine="openpyxl")
     print(f"Данные обновлены и сохранены в {training_data_path}")
 
@@ -200,11 +191,7 @@ def update_training_data(new_data_path, training_data_path=TRAINING_DATA_PATH):
 def retrain_model(new_data_path, model_path='./detect/models'):
     # Обновляем датасет
     updated_data = update_training_data(new_data_path)
-
-    # Загружаем обновленные данные
     new_features, new_labels = load_data(TRAINING_DATA_PATH)
-   
-    # Загружаем обученные модели
     models = load_trained_models(model_path)
     
     base_models = {
@@ -215,34 +202,33 @@ def retrain_model(new_data_path, model_path='./detect/models'):
     meta_model = models['meta_model.pkl']
     label_encoder = models['label_encoder.pkl']
     
-    # Преобразуем метки в числовые
+    # Объединяем старые и новые метки
+    all_labels = np.concatenate([models['label_encoder.pkl'].classes_, new_labels])
+    
+    label_encoder.fit(all_labels)  # Обновляем encoder
+    
+    # метки в числовые значения
     new_labels_encoded = label_encoder.transform(new_labels)
-
-    # Загружаем старые данные для дообучения
-    old_data_path = './train.xlsx'  # Путь к старым данным
+    
+    old_data_path = './train.xlsx'  
     old_features, old_labels = load_data(old_data_path)
     old_labels_encoded = label_encoder.transform(old_labels)
     
-    # Объединяем старые и новые данные
     combined_features = pd.concat([old_features, new_features], ignore_index=True)
     combined_labels = np.concatenate([old_labels_encoded, new_labels_encoded])
     
-    # Разделяем на тренировочные и тестовые данные
     X_train, X_test, y_train, y_test = train_test_split(
         combined_features, combined_labels, test_size=0.2, random_state=42, stratify=combined_labels
     )
     
-    # Проверка классов
     if len(np.unique(y_train)) < 2:
         print("Недостаточно классов для дообучения. Использую старые данные для балансировки.")
         return
     
-    # Дообучение базовых моделей
     for name, model in base_models.items():
         print(f"Дообучение модели {name}...")
         model.fit(X_train, y_train)
     
-    # Создание мета-признаков
     train_meta = np.column_stack([model.predict_proba(X_train)[:, 1] for model in base_models.values()])
     test_meta = np.column_stack([model.predict_proba(X_test)[:, 1] for model in base_models.values()])
 
