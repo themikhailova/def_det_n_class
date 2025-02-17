@@ -45,15 +45,61 @@ class Ui_MainWindow(object):
         self.verticalLayout_3 = QtWidgets.QVBoxLayout(self.setting)
         self.verticalLayout_3.setObjectName("verticalLayout_3")
 
-        self.defect = QtWidgets.QGraphicsView(self.setting)
+        self.defect = QtWidgets.QLabel(self.setting)
         self.defect.setObjectName("defect")
+        self.defect.setAlignment(QtCore.Qt.AlignCenter)  # Центрируем изображение
         self.defect.setStyleSheet("""
-            QGraphicsView {
+            QLabel {
                 border: 2px solid #88C0D0;
                 background-color: #3B4252;
             }
         """)
+
         self.verticalLayout_3.addWidget(self.defect)
+
+        from PyQt5.QtWidgets import QSizePolicy
+
+        # Горизонтальный контейнер для кнопок
+        self.button_layout = QtWidgets.QHBoxLayout()
+
+        # Кнопка "Влево"
+        self.btn_left = QtWidgets.QPushButton(self.setting)
+        self.btn_left.setText("⬅️")
+        self.btn_left.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # Растягиваем по ширине
+        self.btn_left.setFixedHeight(40)  # Высота фиксированная
+        self.btn_left.setStyleSheet("""
+            QPushButton {
+                background-color: #2E3440;
+                color: #88C0D0;
+                border: 2px solid #88C0D0;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #3B4252;
+            }
+        """)
+        self.button_layout.addWidget(self.btn_left)
+
+        # Кнопка "Вправо"
+        self.btn_right = QtWidgets.QPushButton(self.setting)
+        self.btn_right.setText("➡️")
+        self.btn_right.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # Растягиваем по ширине
+        self.btn_right.setFixedHeight(40)  # Высота фиксированная
+        self.btn_right.setStyleSheet("""
+            QPushButton {
+                background-color: #2E3440;
+                color: #88C0D0;
+                border: 2px solid #88C0D0;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #3B4252;
+            }
+        """)
+        self.button_layout.addWidget(self.btn_right)
+
+        # ⬇️ Добавляем кнопки "Влево" и "Вправо" прямо ПЕРЕД кнопкой "Изменить"
+        self.verticalLayout_3.addLayout(self.button_layout)
 
         self.edit = QtWidgets.QPushButton(self.setting)
         self.edit.setObjectName("edit")
@@ -172,6 +218,8 @@ class Ui_MainWindow(object):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Stylish Interface"))
         self.edit.setText(_translate("MainWindow", "Изменить"))
+        self.btn_left.setText(_translate("MainWindow", "<-"))
+        self.btn_right.setText(_translate("MainWindow", "->"))
         self.cancel.setText(_translate("MainWindow", "Отменить"))
         self.save.setText(_translate("MainWindow", "Сохранить"))
         self.imagine_label.setText(_translate("MainWindow", "Изображения"))
