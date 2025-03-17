@@ -147,12 +147,12 @@ class ImageNavigator:
         self.current_index = 0
         self.df = None
 
-        self.load_excel_data()
+        # self.load_excel_data()
 
         self.ui.btn_left.clicked.connect(self.show_previous_image)
         self.ui.btn_right.clicked.connect(self.show_next_image)
 
-        self.load_current_image()
+        # self.load_current_image()
 
     def load_excel_data(self):
         """Загружает данные из Excel."""
@@ -463,6 +463,7 @@ class MainApp(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, "Успех", f"Модель дообучена на новых данных")
         except PermissionError as e:
                 QtWidgets.QMessageBox.warning(self, "Ошибка", "Открыт файл.")
+        
 
     def on_edit_clicked(self):
         """Обработчик нажатия на кнопку 'Изменить'"""
@@ -562,7 +563,29 @@ class MainApp(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "Ошибка", "Открыт файл.")
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Ошибка", f"Произошла ошибка: {str(e)}")
+    
+    def save_images(self):
+        df = pandas.read_excel(self.excel_path)
+        img = cv2.imread(self.base_image_path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Преобразуем изображение в формат RGB для Pillow
+        output_folder = Path(self.export_directory) / "result_images"
+        output_folder.mkdir(parents=True, exist_ok=True)
 
+        for _, row in df.iterrows():
+            filename = Path(row["anomaly_filename"]).name
+            img_path = output_folder / filename
+
+            anomaly_type = row["Y"]
+            x, y, w, h = row["bounding_rect_x"], row["bounding_rect_y"], row["bounding_rect_w"], row["bounding_rect_h"]
+
+            colour = ast.literal_eval(row["anomaly_colour"]) 
+
+            output_image = img.copy()
+            cv2.rectangle(output_image, (x, y), (x + w, y + h), colour, 2)
+
+            # Сохраняем через Pillow
+            pil_img = Image.fromarray(output_image)  # Преобразуем в изображение Pillow
+            pil_img.save(str(img_path))  # Сохраняем через Pillow
 
     def on_export_clicked(self):
         """Обработчик нажатия на кнопку 'Выгрузить статистику'"""
